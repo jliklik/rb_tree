@@ -1,52 +1,75 @@
 const std = @import("std");
+const queue = @import("queue.zig");
 
-const Color = enum { black, red };
+pub fn RedBlackTree(comptime T: type) type {
+    return struct {
+        const Self = @This();
 
-const Node = struct {
-    left: ?*Node = null,
-    right: ?*Node = null,
-    data: u8,
-    color: Color.black,
+        pub const Color = enum { black, red };
 
-    pub fn new(data: u8) Node {
-        return Node{ .left = null, .right = null, .data = data, .color = Color.black };
-    }
+        pub const Node = struct {
+            left: ?*Node = null,
+            right: ?*Node = null,
+            data: T,
+            color: Color,
 
-    pub fn set_left(self: *Node, left_node: *Node) void {
-        self.left = left_node;
-    }
+            pub fn new(data: T) Node {
+                return Node{ .left = null, .right = null, .data = data, .color = Color.black };
+            }
 
-    pub fn set_right(self: *Node, left_node: *Node) void {
-        self.left = left_node;
-    }
-};
+            pub fn set_left(self: *Node, left_node: *Node) void {
+                self.left = left_node;
+            }
 
-pub const RedBlackTree = struct {
-    root: ?*Node = null,
-    black_neight: u64,
+            pub fn set_right(self: *Node, left_node: *Node) void {
+                self.left = left_node;
+            }
+        };
 
-    pub fn new() RedBlackTree {
-        return RedBlackTree{ .root = null, .black_height = 0 };
-    }
+        root: ?*Node = null,
+        black_neight: u32 = 0,
 
-    pub fn insert(self: *RedBlackTree, data: u8) void {
-        if (self.black_neight == 0) {
-            self.root = &Node.new(data);
-        } else {
-            std.debug.print("TO DO");
+        pub fn insert(self: *Self, data: T) void {
+            if (self.black_neight == 0) {
+                var new_node = Node.new(data);
+                self.root = &new_node;
+            } else {
+                std.debug.print("{s}", .{"TO DO"});
+            }
         }
-    }
 
-    pub fn level_order_transversal(self: *RedBlackTree) void {
-        if (self.root == null) {
-            return;
+        pub fn level_order_transversal(self: *Self) void {
+            if (self.root == null) {
+                return;
+            }
+
+            const Q = queue.Queue(?*Node);
+            var q = Q{};
+            var root = Q.Node{ .data = self.root };
+            q.push(&root);
+
+            std.debug.print("{s} ", .{"HELLO"});
+
+            while (!q.is_empty()) {
+                const q_node = q.pop() orelse null;
+                std.debug.print("{} ", .{q_node.?.data.?.data});
+
+                if (q_node.?.data.?.left != null) {
+                    var left_node = Q.Node{ .data = q_node.?.data.?.left };
+                    q.push(&left_node);
+                }
+                if (q_node.?.data.?.right != null) {
+                    var right_node = Q.Node{ .data = q_node.?.data.?.right };
+                    q.push(&right_node);
+                }
+            }
         }
-    }
-};
+    };
+}
 
 test "create red black tree" {
-    var rbtree = RedBlackTree.new();
+    const RBTree = RedBlackTree(u32);
+    var rbtree = RBTree{};
     rbtree.insert(1);
-
-    // try std.testing.expectEqual(@as(i32, end - 1), cbuffer.most_recent_value());
+    rbtree.level_order_transversal();
 }

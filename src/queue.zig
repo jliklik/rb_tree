@@ -23,6 +23,13 @@ pub fn Queue(comptime T: type) type {
         head: ?*Node = null,
         tail: ?*Node = null,
 
+        pub fn is_empty(queue: *Self) bool {
+            if (queue.head == queue.tail) {
+                return true;
+            }
+            return false;
+        }
+
         pub fn pop(queue: *Self) ?*Node {
             const head = queue.head orelse null; // unwrap the option
             if (head != null) {
@@ -62,6 +69,7 @@ test "basic Queue test" {
     var five = Q.Node{ .data = 5 };
 
     try testing.expect(q.pop() == null);
+    try testing.expect(q.is_empty() == true);
 
     q.push(&one);
     q.push(&two);
@@ -77,4 +85,5 @@ test "basic Queue test" {
     try testing.expect(q.pop().?.data == 4);
     try testing.expect(q.pop().?.data == 5);
     try testing.expect(q.pop() == null);
+    try testing.expect(q.is_empty() == true);
 }
