@@ -11,11 +11,8 @@ pub fn RedBlackTree(comptime T: type) type {
             left: ?*Node = null,
             right: ?*Node = null,
             data: T,
-            color: Color,
-
-            pub fn new(data: T) Node {
-                return Node{ .left = null, .right = null, .data = data, .color = Color.black };
-            }
+            color: Color = Color.black,
+            frequency: u32 = 1,
 
             pub fn set_left(self: *Node, left_node: *Node) void {
                 self.left = left_node;
@@ -28,13 +25,35 @@ pub fn RedBlackTree(comptime T: type) type {
 
         root: ?*Node = null,
         black_neight: u32 = 0,
+        allocator: std.mem.Allocator,
 
-        pub fn insert(self: *Self, data: T) void {
-            if (self.black_neight == 0) {
-                var new_node = Node.new(data);
-                self.root = &new_node;
+        fn new(allocator: std.mem.Allocator) Self {
+            return .{ .black_neight = 0, .root = null, .allocator = allocator };
+        }
+
+        fn create_node(self: *Self, data: T) !*Node {
+            var node = try self.allocator.create(Node);
+            node.data = data;
+            return node;
+        }
+
+        pub fn insert(self: *Self, data: T) !void {
+            self.root = try do_insert(self, data, self.root);
+        }
+
+        fn do_insert(self: *Self, data: T, node: ?*Node) !*Node {
+            if (node) |n| {
+                if (data < n.data) {
+                    n.left = try do_insert(self, data, n.left);
+                } else if (data > n.data) {
+                    n.right = try do_insert(self, data, n.right);
+                } else {
+                    n.frequency += 1;
+                }
+                return n;
             } else {
-                std.debug.print("{s}", .{"TO DO"});
+                const new_node = try create_node(self, data);
+                return new_node;
             }
         }
 
@@ -43,33 +62,38 @@ pub fn RedBlackTree(comptime T: type) type {
                 return;
             }
 
+            std.debug.print("root data: {} ", .{self.root.?.data});
             const Q = queue.Queue(?*Node);
             var q = Q{};
             var root = Q.Node{ .data = self.root };
             q.push(&root);
 
-            std.debug.print("{s} ", .{"HELLO"});
+            // while (!q.is_empty()) {
+            //     const q_node = q.pop();
+            //     if (q_node) |n| {
+            //         if (n.data) |qn| {
+            //             std.debug.print("{} ", .{qn.data});
 
-            while (!q.is_empty()) {
-                const q_node = q.pop() orelse null;
-                std.debug.print("{} ", .{q_node.?.data.?.data});
-
-                if (q_node.?.data.?.left != null) {
-                    var left_node = Q.Node{ .data = q_node.?.data.?.left };
-                    q.push(&left_node);
-                }
-                if (q_node.?.data.?.right != null) {
-                    var right_node = Q.Node{ .data = q_node.?.data.?.right };
-                    q.push(&right_node);
-                }
-            }
+            //             if (qn.left != null) {
+            //                 var left_node = Q.Node{ .data = qn.left };
+            //                 q.push(&left_node);
+            //             }
+            //             if (qn.right != null) {
+            //                 var right_node = Q.Node{ .data = qn.right };
+            //                 q.push(&right_node);
+            //             }
+            //         }
+            //     }
+            // }
         }
     };
 }
 
 test "create red black tree" {
-    const RBTree = RedBlackTree(u32);
-    var rbtree = RBTree{};
-    rbtree.insert(1);
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var rbtree = RedBlackTree(u32).new(allocator);
+    try rbtree.insert(1);
     rbtree.level_order_transversal();
 }

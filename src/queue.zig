@@ -24,7 +24,7 @@ pub fn Queue(comptime T: type) type {
         tail: ?*Node = null,
 
         pub fn is_empty(queue: *Self) bool {
-            if (queue.head == queue.tail) {
+            if ((queue.head == queue.tail) and (queue.head == null)) {
                 return true;
             }
             return false;
