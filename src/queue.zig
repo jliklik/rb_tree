@@ -11,10 +11,6 @@ pub fn Queue(comptime T: type) type {
             next: ?*Node = null,
             data: T,
 
-            pub fn new(data: u8) Node {
-                return Node{ .next = null, .data = data };
-            }
-
             pub fn set_next(self: *Node, next_node: *Node) void {
                 self.next = next_node;
             }
@@ -22,68 +18,85 @@ pub fn Queue(comptime T: type) type {
 
         head: ?*Node = null,
         tail: ?*Node = null,
+        allocator: std.mem.Allocator,
 
-        pub fn is_empty(queue: *Self) bool {
-            if ((queue.head == queue.tail) and (queue.head == null)) {
+        fn new(allocator: std.mem.Allocator) Self {
+            return .{ .head = null, .tail = null, .allocator = allocator };
+        }
+
+        fn create_node(self: *Self, data: T) !*Node {
+            var node = try self.allocator.create(Node);
+            node.data = data;
+            node.next = null;
+            return node;
+        }
+
+        pub fn is_empty(self: *Self) bool {
+            if ((self.head == self.tail) and (self.head == null)) {
                 return true;
             }
             return false;
         }
 
-        pub fn pop(queue: *Self) ?*Node {
-            const head = queue.head orelse null; // unwrap the option
-            if (head != null) {
-                queue.head = head.?.next;
-                // last item popped
-                if (queue.head == null) {
-                    queue.tail = null;
+        pub fn pop(self: *Self) ?T {
+            if (self.head) |head| {
+                //std.debug.print("{any} ", .{head.next});
+                if (head.next) |next| {
+                    // why is head.next not == null??
+                    std.debug.print("DATA: {}", .{next.data});
+                } else {
+                    std.debug.print("{s}", .{"last item!"});
                 }
-                return head;
+
+                self.head = head.next;
+                // last item popped
+                if (self.head == null) {
+                    std.debug.print("{s} ", .{"last item popped"});
+                    self.tail = null;
+                }
+                return head.data;
             } else {
                 return null;
             }
         }
 
-        pub fn push(queue: *Self, node: *Node) void {
-            var tail = queue.tail orelse null; // unwrap the option
-            if (tail == null) {
-                queue.head = node;
-                queue.tail = node;
+        pub fn push(self: *Self, data: T) !void {
+            const node = try create_node(self, data);
+            if (self.tail) |tail| {
+                tail.next = node;
+                self.tail = node;
+            } else {
+                // first node in queue
+                self.head = node;
+                self.tail = node;
                 return;
             }
-
-            tail.?.next = node;
-            queue.tail = node;
         }
     };
 }
 
 test "basic Queue test" {
-    const Q = Queue(u32);
-    var q = Q{};
-
-    var one = Q.Node{ .data = 1 };
-    var two = Q.Node{ .data = 2 };
-    var three = Q.Node{ .data = 3 };
-    var four = Q.Node{ .data = 4 };
-    var five = Q.Node{ .data = 5 };
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var q = Queue(u32).new(allocator);
 
     try testing.expect(q.pop() == null);
     try testing.expect(q.is_empty() == true);
 
-    q.push(&one);
-    q.push(&two);
-    q.push(&three);
+    try q.push(1);
+    try q.push(2);
+    try q.push(3);
 
-    try testing.expect(q.pop().?.data == 1);
-    try testing.expect(q.pop().?.data == 2);
-    try testing.expect(q.pop().?.data == 3);
+    try testing.expect(q.pop() == 1);
+    try testing.expect(q.pop() == 2);
+    try testing.expect(q.pop() == 3);
 
-    q.push(&four);
-    q.push(&five);
+    try q.push(4);
+    try q.push(5);
 
-    try testing.expect(q.pop().?.data == 4);
-    try testing.expect(q.pop().?.data == 5);
+    try testing.expect(q.pop() == 4);
+    try testing.expect(q.pop() == 5);
     try testing.expect(q.pop() == null);
     try testing.expect(q.is_empty() == true);
 }

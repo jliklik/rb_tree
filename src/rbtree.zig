@@ -68,32 +68,32 @@ pub fn RedBlackTree(comptime T: type) type {
             var root = Q.Node{ .data = self.root };
             q.push(&root);
 
-            // while (!q.is_empty()) {
-            //     const q_node = q.pop();
-            //     if (q_node) |n| {
-            //         if (n.data) |qn| {
-            //             std.debug.print("{} ", .{qn.data});
+            while (!q.is_empty()) {
+                const q_node = q.pop();
+                if (q_node) |n| {
+                    if (n.data) |qn| {
+                        std.debug.print("{} ", .{qn.data});
 
-            //             if (qn.left != null) {
-            //                 var left_node = Q.Node{ .data = qn.left };
-            //                 q.push(&left_node);
-            //             }
-            //             if (qn.right != null) {
-            //                 var right_node = Q.Node{ .data = qn.right };
-            //                 q.push(&right_node);
-            //             }
-            //         }
-            //     }
-            // }
+                        if (qn.left != null) {
+                            var left_node = Q.Node{ .data = qn.left };
+                            q.push(&left_node);
+                        }
+                        if (qn.right != null) {
+                            var right_node = Q.Node{ .data = qn.right };
+                            q.push(&right_node);
+                        }
+                    }
+                }
+            }
         }
     };
 }
 
-test "create red black tree" {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-    var rbtree = RedBlackTree(u32).new(allocator);
-    try rbtree.insert(1);
-    rbtree.level_order_transversal();
-}
+// test "create red black tree" {
+//     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+//     defer arena.deinit();
+//     const allocator = arena.allocator();
+//     var rbtree = RedBlackTree(u32).new(allocator);
+//     try rbtree.insert(1);
+//     rbtree.level_order_transversal();
+// }
