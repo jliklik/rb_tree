@@ -7,6 +7,8 @@ pub fn RedBlackTree(comptime T: type) type {
 
         pub const Color = enum { black, red };
 
+        pub const RotationError = error{ right_child_is_nil, left_child_is_nil };
+
         pub const Node = struct {
             left: ?*Node = null,
             right: ?*Node = null,
@@ -24,6 +26,7 @@ pub fn RedBlackTree(comptime T: type) type {
         };
 
         root: ?*Node = null,
+        parent: ?*Node = null,
         black_neight: u32 = 0,
         allocator: std.mem.Allocator,
 
@@ -80,20 +83,56 @@ pub fn RedBlackTree(comptime T: type) type {
             }
         }
 
-        fn rotate_right(self: *Node, child: *Node, grandchild: *Node) *Node {}
+        // https://www.happycoders.eu/algorithms/avl-tree-java/
+        //     N             R
+        //    / \           / \
+        //   L   R         N   RR
+        //      / \       / \
+        //    RL   RR    L   RL
+        // Step 1: N right child becomes RL
+        // Step 2: R left child becomes node
+        fn rotate_left(node: *Node) !*Node {
+            const right_child = node.right;
+            if (right_child) |rc| {
+                node.right = rc.left;
+                rc.left = node;
+                return rc;
+            } else {
+                RotationError.right_child_is_nil;
+            }
+        }
+
+        // https://www.happycoders.eu/algorithms/avl-tree-java/
+        //         N             L
+        //        / \           / \
+        //       L   R         LL  N
+        //      / \               / \
+        //     LL  LR            LR  R
+        // Step 1: N left child becomes LR
+        // Step 2: L right child becomes node
+        fn rotate_right(node: *Node) !*Node {
+            const left_child = node.right;
+            if (left_child) |lc| {
+                node.left = lc.right;
+                lc.right = node;
+                return lc;
+            } else {
+                RotationError.right_child_is_nil;
+            }
+        }
 
         // https://www.youtube.com/watch?v=A3JZinzkMpk
         fn rebalance(self: *Node, child: *Node, grandchild: ?*Node) *Node {
             if (grandchild) |gc| {
-                // Case 1: Z.uncle is red
+                // Case 1: Both parent and uncle are red
                 //
                 //      Before:                  After:
                 //
-                //      Self(B)                  Self(R!)
-                //     /      \                 /       \
-                //    A(R)     C(R)            A(B!)     C(B!)
-                //   /                        /
-                //  Z(R)                     Z(R)
+                //      GP(B)                   GP(R!)
+                //     /    \                  /       \
+                //    P(R)   U(R)             A(B!)     C(B!)
+                //   /                      /
+                //  N(R)                  Z(R)
                 //
                 // Set A and C to black
                 // Set Self to Red
@@ -103,18 +142,24 @@ pub fn RedBlackTree(comptime T: type) type {
                     sibling.color = Color.black;
                     self.color = Color.red;
                 }
-                // Case 2: Z.uncle is black (Self, A, Z form a triangle)
+                // Case 2: L uncle's is black (Self, A, Z form a triangle)
                 //
-                //        Before:                  After:
+                //        Before:                  After:                       After2:
                 //
-                //        Self(B)                  Self(B)
-                //       /      \                 /       \
-                //      C(B)     A(R)            C(B)      Z(R)
-                //              /  \                      / \
-                // grandchild Z(R) M                     X   A(R)
-                //            / \                            / \
-                //           X   Y                          Y   M
-                // Double rotation required:
+                //            P                        P                             L(R)
+                //          /   \                    /   \                          /    \
+                //        C(B)    N(R)            C(B)   L(R)                      P      N(R)
+                //               /   \                   /   \                    / \      / \
+                //             L(R)   R                LL    N(R)              C(B)  LL  LR   R
+                //            / \                            /  \
+                //          LL   LR                        LR    R
+
+                // This is the bottom up approach. Note that thre are actually two approaches:
+                // Top down approach
+                // - fix as you go down - don't need to walk back up afterwards
+                // Bottom up approach
+                // - fix after insertion
+
                 // Rotate Z's parent in opposite direction of Z
                 // (in this case, right rotate A since Z is in left direction)
                 // If A is black, then we are done for now
@@ -128,10 +173,10 @@ pub fn RedBlackTree(comptime T: type) type {
                 //      Self(B)                  C(B!)
                 //     /      \                 /     \
                 //    C(R)     nil            Z(R)   Self(B!)
-                //   /
-                //  Z(R)
+                //   /   \                            /
+                //  Z(R)  X                          X
                 //
-                // Rotate around C
+                // Rotate right on Self
                 // Recolor C and Self
                 return self;
             } else {
