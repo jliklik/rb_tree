@@ -20,7 +20,7 @@ pub fn Queue(comptime T: type) type {
         tail: ?*Node = null,
         allocator: std.mem.Allocator,
 
-        fn new(allocator: std.mem.Allocator) Self {
+        pub fn new(allocator: std.mem.Allocator) Self {
             return .{ .head = null, .tail = null, .allocator = allocator };
         }
 
@@ -40,18 +40,9 @@ pub fn Queue(comptime T: type) type {
 
         pub fn pop(self: *Self) ?T {
             if (self.head) |head| {
-                //std.debug.print("{any} ", .{head.next});
-                if (head.next) |next| {
-                    // why is head.next not == null??
-                    std.debug.print("DATA: {}", .{next.data});
-                } else {
-                    std.debug.print("{s}", .{"last item!"});
-                }
-
                 self.head = head.next;
                 // last item popped
                 if (self.head == null) {
-                    std.debug.print("{s} ", .{"last item popped"});
                     self.tail = null;
                 }
                 return head.data;

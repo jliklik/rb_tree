@@ -27,13 +27,13 @@ pub fn RedBlackTree(comptime T: type) type {
         black_neight: u32 = 0,
         allocator: std.mem.Allocator,
 
-        fn new(allocator: std.mem.Allocator) Self {
+        pub fn new(allocator: std.mem.Allocator) Self {
             return .{ .black_neight = 0, .root = null, .allocator = allocator };
         }
 
         fn create_node(self: *Self, data: T) !*Node {
-            var node = try self.allocator.create(Node);
-            node.data = data;
+            const node = try self.allocator.create(Node);
+            node.* = .{ .data = data, .left = null, .right = null, .color = Color.black, .frequency = 1 };
             return node;
         }
 
@@ -57,43 +57,39 @@ pub fn RedBlackTree(comptime T: type) type {
             }
         }
 
-        pub fn level_order_transversal(self: *Self) void {
-            if (self.root == null) {
-                return;
-            }
+        pub fn level_order_transversal(self: *Self) !void {
+            if (self.root) |root| {
+                var q = queue.Queue(*Node).new(self.allocator);
+                try q.push(root);
 
-            std.debug.print("root data: {} ", .{self.root.?.data});
-            const Q = queue.Queue(?*Node);
-            var q = Q{};
-            var root = Q.Node{ .data = self.root };
-            q.push(&root);
-
-            while (!q.is_empty()) {
-                const q_node = q.pop();
-                if (q_node) |n| {
-                    if (n.data) |qn| {
-                        std.debug.print("{} ", .{qn.data});
-
-                        if (qn.left != null) {
-                            var left_node = Q.Node{ .data = qn.left };
-                            q.push(&left_node);
+                while (!q.is_empty()) {
+                    const rbtree_node = q.pop();
+                    if (rbtree_node) |rbn| {
+                        std.debug.print("{} ", .{rbn.data});
+                        if (rbn.left) |left| {
+                            try q.push(left);
                         }
-                        if (qn.right != null) {
-                            var right_node = Q.Node{ .data = qn.right };
-                            q.push(&right_node);
+                        if (rbn.right) |right| {
+                            try q.push(right);
                         }
                     }
                 }
+            } else {
+                return;
             }
         }
     };
 }
 
-// test "create red black tree" {
-//     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-//     defer arena.deinit();
-//     const allocator = arena.allocator();
-//     var rbtree = RedBlackTree(u32).new(allocator);
-//     try rbtree.insert(1);
-//     rbtree.level_order_transversal();
-// }
+test "create red black tree" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var rbtree = RedBlackTree(u32).new(allocator);
+    try rbtree.insert(5);
+    try rbtree.insert(3);
+    try rbtree.insert(2);
+    try rbtree.insert(4);
+    try rbtree.insert(7);
+    try rbtree.level_order_transversal();
+}
