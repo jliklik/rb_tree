@@ -31,20 +31,27 @@ pub fn RedBlackTree(comptime T: type) type {
             return .{ .black_neight = 0, .root = null, .allocator = allocator };
         }
 
+        /// Create a new node
+        /// By default, new nodes created should be the color red
         fn create_node(self: *Self, data: T) !*Node {
             const node = try self.allocator.create(Node);
-            node.* = .{ .data = data, .left = null, .right = null, .color = Color.black, .frequency = 1 };
+            node.* = .{ .data = data, .left = null, .right = null, .color = Color.red, .frequency = 1 };
             return node;
         }
 
         pub fn insert(self: *Self, data: T) !void {
             self.root = try do_insert(self, data, self.root);
+            if (self.root) |root| {
+                root.color = Color.black;
+            }
         }
 
         fn do_insert(self: *Self, data: T, node: ?*Node) !*Node {
             if (node) |n| {
                 if (data < n.data) {
                     n.left = try do_insert(self, data, n.left);
+                    n = rebalance(n, n.left, n.left.left);
+                    n = rebalance(n, n.left, n.left.right);
                 } else if (data > n.data) {
                     n.right = try do_insert(self, data, n.right);
                 } else {
@@ -57,6 +64,81 @@ pub fn RedBlackTree(comptime T: type) type {
             }
         }
 
+        fn get_sibling(parent: *Node, node: *Node) ?*Node {
+            if (parent.left == node) {
+                return parent.right;
+            } else {
+                return parent.left;
+            }
+        }
+
+        fn sibling_color(parent: *Node, node: *Node) Color {
+            if (get_sibling(parent, node)) |sibling| {
+                return sibling.color;
+            } else {
+                return Color.black;
+            }
+        }
+
+        fn rotate_right(self: *Node, child: *Node, grandchild: *Node) *Node {}
+
+        // https://www.youtube.com/watch?v=A3JZinzkMpk
+        fn rebalance(self: *Node, child: *Node, grandchild: ?*Node) *Node {
+            if (grandchild) |gc| {
+                // Case 1: Z.uncle is red
+                //
+                //      Before:                  After:
+                //
+                //      Self(B)                  Self(R!)
+                //     /      \                 /       \
+                //    A(R)     C(R)            A(B!)     C(B!)
+                //   /                        /
+                //  Z(R)                     Z(R)
+                //
+                // Set A and C to black
+                // Set Self to Red
+                if (gc.color == Color.red and sibling_color(self, child) == Color.red) {
+                    child.color = Color.black;
+                    var sibling = get_sibling(self, child);
+                    sibling.color = Color.black;
+                    self.color = Color.red;
+                }
+                // Case 2: Z.uncle is black (Self, A, Z form a triangle)
+                //
+                //        Before:                  After:
+                //
+                //        Self(B)                  Self(B)
+                //       /      \                 /       \
+                //      C(B)     A(R)            C(B)      Z(R)
+                //              /  \                      / \
+                // grandchild Z(R) M                     X   A(R)
+                //            / \                            / \
+                //           X   Y                          Y   M
+                // Double rotation required:
+                // Rotate Z's parent in opposite direction of Z
+                // (in this case, right rotate A since Z is in left direction)
+                // If A is black, then we are done for now
+                // If A is red, notice that this will result in another violation, caused by A
+                // This leads to Case 3 (rotate around Z again)
+
+                // Case 3: Z.uncle is black (Self, A, Z form a line)
+                //
+                //      Before:                  After:
+                //
+                //      Self(B)                  C(B!)
+                //     /      \                 /     \
+                //    C(R)     nil            Z(R)   Self(B!)
+                //   /
+                //  Z(R)
+                //
+                // Rotate around C
+                // Recolor C and Self
+                return self;
+            } else {
+                return self;
+            }
+        }
+
         pub fn level_order_transversal(self: *Self) !void {
             if (self.root) |root| {
                 var q = queue.Queue(*Node).new(self.allocator);
@@ -65,7 +147,11 @@ pub fn RedBlackTree(comptime T: type) type {
                 while (!q.is_empty()) {
                     const rbtree_node = q.pop();
                     if (rbtree_node) |rbn| {
-                        std.debug.print("{} ", .{rbn.data});
+                        var color = "B";
+                        if (rbn.color == Color.red) {
+                            color = "R";
+                        }
+                        std.debug.print("{}{s} ", .{ rbn.data, color });
                         if (rbn.left) |left| {
                             try q.push(left);
                         }
