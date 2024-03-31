@@ -15,6 +15,7 @@ pub fn RedBlackTree(comptime T: type) type {
             data: T,
             color: Color = Color.black,
             frequency: u32 = 1,
+            height: u32 = 0,
 
             pub fn set_left(self: *Node, left_node: *Node) void {
                 self.left = left_node;
@@ -26,18 +27,18 @@ pub fn RedBlackTree(comptime T: type) type {
         };
 
         root: ?*Node = null,
-        black_neight: u32 = 0,
+        black_height: u32 = 0,
         allocator: std.mem.Allocator,
 
         pub fn new(allocator: std.mem.Allocator) Self {
-            return .{ .black_neight = 0, .root = null, .allocator = allocator };
+            return .{ .black_height = 0, .root = null, .allocator = allocator };
         }
 
         /// Create a new node
         /// By default, new nodes created should be the color red
         fn create_node(self: *Self, data: T) !*Node {
             const node = try self.allocator.create(Node);
-            node.* = .{ .data = data, .left = null, .right = null, .color = Color.red, .frequency = 1 };
+            node.* = .{ .data = data, .left = null, .right = null, .color = Color.red, .frequency = 1, .height = 0 };
             return node;
         }
 
@@ -48,19 +49,40 @@ pub fn RedBlackTree(comptime T: type) type {
             }
         }
 
+        /// Returns the height of a node
+        fn height(left: ?*Node, right: ?*Node) u32 {
+            if (left) |l| {
+                if (right) |r| {
+                    if (l.height > r.height) {
+                        return l.height + 1;
+                    }
+                    return r.height + 1;
+                }
+                return l.height + 1;
+            } else if (right) |r| {
+                return r.height + 1;
+            } else {
+                return 0; // both left and right are null
+            }
+        }
+
         fn do_insert(self: *Self, data: T, node: ?*Node) !*Node {
             if (node) |n| {
                 if (data < n.data) {
                     n.left = try do_insert(self, data, n.left);
                     if (n.left) |left| {
-                        var new_n = try rebalance(n, left, left.left);
+                        var new_n = n;
+                        new_n.height = height(n.left, n.right);
+                        new_n = try rebalance(new_n, left, left.left);
                         new_n = try rebalance(new_n, left, left.right);
                         return new_n;
                     }
                 } else if (data > n.data) {
                     n.right = try do_insert(self, data, n.right);
                     if (n.right) |right| {
-                        var new_n = try rebalance(n, right, right.left);
+                        var new_n = n;
+                        new_n.height = height(n.left, n.right);
+                        new_n = try rebalance(n, right, right.left);
                         new_n = try rebalance(new_n, right, right.right);
                         return new_n;
                     }
@@ -103,6 +125,9 @@ pub fn RedBlackTree(comptime T: type) type {
             if (right_child) |r| {
                 node.right = r.left;
                 r.left = node;
+                // update heights of N and R
+                node.height = height(node.left, node.right);
+                r.height = height(r.left, r.right);
                 return r;
             } else {
                 return RotationError.right_child_is_nil;
@@ -122,6 +147,9 @@ pub fn RedBlackTree(comptime T: type) type {
             if (left_child) |l| {
                 node.left = l.right;
                 l.right = node;
+                // update heights of N and L
+                node.height = height(node.left, node.right);
+                l.height = height(l.left, l.right);
                 return l;
             } else {
                 return RotationError.right_child_is_nil;
@@ -237,6 +265,13 @@ pub fn RedBlackTree(comptime T: type) type {
         }
 
         pub fn level_order_transversal(self: *Self) !void {
+
+            // Try allocating a string that will be long enough to hold the results
+            // const node = try self.allocator.alloc(
+            //     u8,
+            //     2 << self.height;
+            // );
+
             std.debug.print("{s} ", .{" || "});
 
             if (self.root) |root| {
@@ -250,7 +285,7 @@ pub fn RedBlackTree(comptime T: type) type {
                         if (rbn.color == Color.red) {
                             color = "R";
                         }
-                        std.debug.print("{}{s} ", .{ rbn.data, color });
+                        std.debug.print("{}{s}{} ", .{ rbn.data, color, rbn.height });
                         if (rbn.left) |left| {
                             try q.push(left);
                         }
