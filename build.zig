@@ -16,10 +16,10 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const lib = b.addStaticLibrary(.{
-        .name = "rb_tree",
+        .name = "queue",
         // In this case the main source file is merely a path, however, in more
         // complicated build scripts, this could be a generated file.
-        .root_source_file = .{ .path = "src/root.zig" },
+        .root_source_file = .{ .path = "src/queue.zig" },
         .target = target,
         .optimize = optimize,
     });
@@ -28,6 +28,20 @@ pub fn build(b: *std.Build) void {
     // location when the user invokes the "install" step (the default step when
     // running `zig build`).
     b.installArtifact(lib);
+
+    const lib2 = b.addStaticLibrary(.{
+        .name = "rb_tree",
+        // In this case the main source file is merely a path, however, in more
+        // complicated build scripts, this could be a generated file.
+        .root_source_file = .{ .path = "src/rbtree.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // This declares intent for the library to be installed into the standard
+    // location when the user invokes the "install" step (the default step when
+    // running `zig build`).
+    b.installArtifact(lib2);
 
     const exe = b.addExecutable(.{
         .name = "rb_tree",
@@ -67,12 +81,20 @@ pub fn build(b: *std.Build) void {
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
     const lib_unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/root.zig" },
+        .root_source_file = .{ .path = "src/queue.zig" },
         .target = target,
         .optimize = optimize,
     });
 
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
+
+    const lib_unit_tests2 = b.addTest(.{
+        .root_source_file = .{ .path = "src/rbtree.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const run_lib_unit_tests2 = b.addRunArtifact(lib_unit_tests2);
 
     const exe_unit_tests = b.addTest(.{
         .root_source_file = .{ .path = "src/main.zig" },
@@ -87,5 +109,6 @@ pub fn build(b: *std.Build) void {
     // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_unit_tests.step);
+    test_step.dependOn(&run_lib_unit_tests2.step);
     test_step.dependOn(&run_exe_unit_tests.step);
 }
