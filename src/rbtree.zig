@@ -45,7 +45,7 @@ pub fn RedBlackTree(comptime T: type) type {
         pub fn insert(self: *Self, data: T) !void {
             self.root = try do_insert(self, data, self.root);
             if (self.root) |root| {
-                root.color = Color.black;
+                root.color = Color.black; // Root is always black - recolor it if it isn't
             }
         }
 
@@ -68,23 +68,34 @@ pub fn RedBlackTree(comptime T: type) type {
 
         fn do_insert(self: *Self, data: T, node: ?*Node) !*Node {
             if (node) |n| {
+                // std.debug.print("At node: {} ", .{n.data});
                 if (data < n.data) {
                     n.left = try do_insert(self, data, n.left);
                     if (n.left) |left| {
                         var new_n = n;
-                        new_n.height = height(n.left, n.right);
-                        new_n = try rebalance(new_n, left, left.left);
-                        new_n = try rebalance(new_n, left, left.right);
-                        return new_n;
+                        new_n.height = height(left, n.right);
+                        var rebalanced_n = try rebalance(new_n, left, left.left);
+                        if (new_n == rebalanced_n) {
+                            rebalanced_n = try rebalance(new_n, left, left.right);
+                            return rebalanced_n;
+                        }
+                        return rebalanced_n;
                     }
                 } else if (data > n.data) {
                     n.right = try do_insert(self, data, n.right);
                     if (n.right) |right| {
                         var new_n = n;
-                        new_n.height = height(n.left, n.right);
-                        new_n = try rebalance(n, right, right.left);
-                        new_n = try rebalance(new_n, right, right.right);
-                        return new_n;
+                        new_n.height = height(n.left, right);
+                        // std.debug.print("{s} ", .{" > "});
+                        // _ = try self.do_level_order_transversal(new_n);
+                        var rebalanced_n = try rebalance(n, right, right.left);
+                        // std.debug.print("{s} ", .{" >> "});
+                        // _ = try self.do_level_order_transversal(new_n);
+                        if (new_n == rebalanced_n) {
+                            rebalanced_n = try rebalance(new_n, right, right.right);
+                            return rebalanced_n;
+                        }
+                        return rebalanced_n;
                     }
                 } else {
                     n.frequency += 1;
@@ -179,6 +190,8 @@ pub fn RedBlackTree(comptime T: type) type {
                         u.color = Color.black;
                     }
                     self.color = Color.red;
+                    std.debug.print("{} ", .{gc.data});
+                    std.debug.print("{s} ", .{"Case 1"});
                     return self;
                 } else if (red(gc) and red(child) and !red(uncle)) {
                     // Case 2-1: L uncle's is black and P, GP, L form a triangle (double rotation)
@@ -199,6 +212,7 @@ pub fn RedBlackTree(comptime T: type) type {
                         const node_to_return = try rotate_left(self);
                         child.color = Color.black;
                         self.color = Color.red;
+                        std.debug.print("{s} ", .{"Case 2-1"});
                         return node_to_return;
                     }
                     // Case 2-2: R uncle's is black and P, GP, R form a triangle (double rotation)
@@ -219,6 +233,7 @@ pub fn RedBlackTree(comptime T: type) type {
                         const node_to_return = try rotate_right(self);
                         child.color = Color.black;
                         self.color = Color.red;
+                        std.debug.print("{s} ", .{"Case 2-2"});
                         return node_to_return;
                     }
                     // Case 3-1: L uncle's is black and P, GP, L form a line (single rotation)
@@ -237,6 +252,7 @@ pub fn RedBlackTree(comptime T: type) type {
                         const node_to_return = try rotate_left(self);
                         child.color = Color.black;
                         self.color = Color.red;
+                        std.debug.print("{s} ", .{"Case 3-1"});
                         return node_to_return;
                     }
                     // Case 3-2: L uncle's is black and P, GP, L form a line (single rotation)
@@ -253,8 +269,9 @@ pub fn RedBlackTree(comptime T: type) type {
                     //
                     else if (gc == child.left and child == self.left) {
                         const node_to_return = try rotate_right(self);
-                        child.color = Color.black;
-                        self.color = Color.red;
+                        child.color = Color.black; // P
+                        self.color = Color.red; // GP
+                        std.debug.print("{s} ", .{"Case 3-2"});
                         return node_to_return;
                     }
                 }
@@ -264,56 +281,67 @@ pub fn RedBlackTree(comptime T: type) type {
             }
         }
 
-        pub fn level_order_transversal(self: *Self) !void {
-
-            // Try allocating a string that will be long enough to hold the results
-            // const node = try self.allocator.alloc(
-            //     u8,
-            //     2 << self.height;
-            // );
-
+        /// Data display size: how many characters it takes to display the data in each node
+        pub fn level_order_transversal(self: *Self) ![]u8 {
             std.debug.print("{s} ", .{" || "});
 
-            if (self.root) |root| {
-                var q = queue.Queue(*Node).new(self.allocator);
-                try q.push(root);
+            var str: []u8 = "";
 
-                while (!q.is_empty()) {
-                    const rbtree_node = q.pop();
-                    if (rbtree_node) |rbn| {
-                        var color = "B";
-                        if (rbn.color == Color.red) {
-                            color = "R";
-                        }
-                        std.debug.print("{}{s}{} ", .{ rbn.data, color, rbn.height });
-                        if (rbn.left) |left| {
-                            try q.push(left);
-                        }
-                        if (rbn.right) |right| {
-                            try q.push(right);
-                        }
+            if (self.root) |root| {
+                str = try do_level_order_transversal(self, root);
+            }
+            return str;
+        }
+
+        pub fn do_level_order_transversal(self: *Self, node: *Node) ![]u8 {
+            var str: []u8 = "";
+            var q = queue.Queue(*Node).new(self.allocator);
+            try q.push(node);
+
+            while (!q.is_empty()) {
+                const rbtree_node = q.pop();
+                if (rbtree_node) |rbn| {
+                    var color = "B";
+                    if (rbn.color == Color.red) {
+                        color = "R";
+                    }
+
+                    str = try std.fmt.allocPrint(self.allocator, "{s}{}{s}{},", .{ str, rbn.data, color, rbn.height });
+
+                    std.debug.print("{}{s}{} ", .{ rbn.data, color, rbn.height });
+                    if (rbn.left) |left| {
+                        try q.push(left);
+                    }
+                    if (rbn.right) |right| {
+                        try q.push(right);
                     }
                 }
-            } else {
-                return;
             }
+
+            return str;
         }
     };
 }
 
-test "create red black tree" {
+test "red black tree 1" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
     var rbtree = RedBlackTree(u32).new(allocator);
     try rbtree.insert(5);
-    try rbtree.level_order_transversal();
     try rbtree.insert(3);
-    try rbtree.level_order_transversal();
+    var res = try rbtree.level_order_transversal();
+    std.debug.assert(std.mem.eql(u8, "5B1,3R0,", res));
     try rbtree.insert(2);
-    try rbtree.level_order_transversal();
+    res = try rbtree.level_order_transversal();
+    std.debug.assert(std.mem.eql(u8, "3B1,2R0,5R0,", res)); // case 3
     try rbtree.insert(4);
-    try rbtree.level_order_transversal();
-    try rbtree.insert(7);
-    try rbtree.level_order_transversal();
+    res = try rbtree.level_order_transversal();
+    std.debug.assert(std.mem.eql(u8, "3B2,2B0,5B1,4R0,", res)); // case 1
+    try rbtree.insert(10);
+    res = try rbtree.level_order_transversal();
+    std.debug.assert(std.mem.eql(u8, "3B2,2B0,5B1,4R0,10R0,", res)); // case 1
+    try rbtree.insert(9);
+    res = try rbtree.level_order_transversal();
+    std.debug.assert(std.mem.eql(u8, "3B3,2B0,5R2,4B0,10B1,9R0,", res)); // case 1
 }
