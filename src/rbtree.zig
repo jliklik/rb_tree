@@ -34,21 +34,6 @@ pub fn RedBlackTree(comptime T: type) type {
             return .{ .black_height = 0, .root = null, .allocator = allocator };
         }
 
-        /// Create a new node
-        /// By default, new nodes created should be the color red
-        fn create_node(self: *Self, data: T) !*Node {
-            const node = try self.allocator.create(Node);
-            node.* = .{ .data = data, .left = null, .right = null, .color = Color.red, .frequency = 1, .height = 0 };
-            return node;
-        }
-
-        pub fn insert(self: *Self, data: T) !void {
-            self.root = try do_insert(self, data, self.root);
-            if (self.root) |root| {
-                root.color = Color.black; // Root is always black - recolor it if it isn't
-            }
-        }
-
         /// Returns the height of a node
         fn height(left: ?*Node, right: ?*Node) u32 {
             if (left) |l| {
@@ -63,6 +48,21 @@ pub fn RedBlackTree(comptime T: type) type {
                 return r.height + 1;
             } else {
                 return 0; // both left and right are null
+            }
+        }
+
+        /// Create a new node
+        /// By default, new nodes created should be the color red
+        fn create_node(self: *Self, data: T) !*Node {
+            const node = try self.allocator.create(Node);
+            node.* = .{ .data = data, .left = null, .right = null, .color = Color.red, .frequency = 1, .height = 0 };
+            return node;
+        }
+
+        pub fn insert(self: *Self, data: T) !void {
+            self.root = try do_insert(self, data, self.root);
+            if (self.root) |root| {
+                root.color = Color.black; // Root is always black - recolor it if it isn't
             }
         }
 
@@ -179,9 +179,9 @@ pub fn RedBlackTree(comptime T: type) type {
             }
         }
 
-        // https://www.youtube.com/watch?v=A3JZinzkMpk
-        // https://www.cs.purdue.edu/homes/ayg/CS251/slides/chap13b.pdf
-        // Returns tuple of .{rebalancing done? (T/F), new grandparent node}
+        /// https://www.youtube.com/watch?v=A3JZinzkMpk
+        /// https://www.cs.purdue.edu/homes/ayg/CS251/slides/chap13b.pdf
+        /// Returns struct of .{modified? (T/F), new grandparent node}
         fn rebalance(self: *Node, child: *Node, grandchild: ?*Node) !struct { modified: bool, node: *Node } {
             if (grandchild) |gc| {
                 // Case 1: Both parent and uncle are red
@@ -293,6 +293,15 @@ pub fn RedBlackTree(comptime T: type) type {
             }
         }
 
+        pub fn delete(self: *Self, data: T) !void {}
+
+        /// Method 1: Double black (bottom-up approach): https://www.cs.purdue.edu/homes/ayg/CS251/slides/chap13c.pdf
+        /// Method 2: Multi-case https://www.youtube.com/watch?v=eoQpRtMpA9I
+        pub fn do_delete(self: *Self, data: T, node: ?*Node) !*Node {
+
+            // get predecessor
+        }
+
         pub fn level_order_transversal(self: *Self) ![]u8 {
             // std.debug.print("{s} ", .{" || "});
 
@@ -374,7 +383,7 @@ test "red black tree 2" {
     std.debug.assert(std.mem.eql(u8, "8B3,5B0,15R2,12B1,19B1,9R0,13R0,23R0,", res));
     try rbtree.insert(10);
     res = try rbtree.level_order_transversal();
-    std.debug.assert(std.mem.eql(u8, "12B3,8R2,15R2,5B0,9B1,13B0,19B1,10R0,23R0,", res)); // case 2 - 15 should be RED but is BLACK
+    std.debug.assert(std.mem.eql(u8, "12B3,8R2,15R2,5B0,9B1,13B0,19B1,10R0,23R0,", res));
 }
 
 test "red black tree 3" {
@@ -394,5 +403,5 @@ test "red black tree 3" {
     std.debug.assert(std.mem.eql(u8, "8B3,2R2,15B0,1B1,5B1,0R0,3R0,7R0,", res));
     try rbtree.insert(6);
     res = try rbtree.level_order_transversal();
-    std.debug.assert(std.mem.eql(u8, "5B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,6R0,", res)); // case 2 - 15 should be RED but is BLACK
+    std.debug.assert(std.mem.eql(u8, "5B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,6R0,", res));
 }
