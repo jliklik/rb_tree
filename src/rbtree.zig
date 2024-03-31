@@ -68,21 +68,23 @@ pub fn RedBlackTree(comptime T: type) type {
 
         fn do_insert(self: *Self, data: T, node: ?*Node) !*Node {
             if (node) |n| {
-                std.debug.print("At node: {} ", .{n.data});
+                // std.debug.print("At node: {} ", .{n.data});
                 if (data < n.data) {
                     n.left = try do_insert(self, data, n.left);
                     if (n.left) |left| {
                         var new_n = n;
                         new_n.height = height(left, n.right);
-                        std.debug.print("{s} ", .{" < "});
-                        _ = try self.do_level_order_transversal(new_n);
-                        var rebalanced_n = try rebalance(new_n, left, left.left);
-                        std.debug.print("{s} ", .{" << "});
-                        _ = try self.do_level_order_transversal(new_n);
-                        if (new_n == rebalanced_n) {
-                            rebalanced_n = try rebalance(new_n, left, left.right);
-                            std.debug.print("{s} ", .{" <<< "});
-                            _ = try self.do_level_order_transversal(new_n);
+                        // std.debug.print("{s} ", .{" < "});
+                        // _ = try self.do_level_order_transversal(new_n);
+                        // std.debug.print("{s} ", .{" << "});
+                        var rebalanced = try rebalance(new_n, left, left.left);
+                        var rebalanced_n = rebalanced.node;
+                        // _ = try self.do_level_order_transversal(rebalanced_n);
+                        if (!rebalanced.modified) {
+                            // std.debug.print("{s} ", .{" <<< "});
+                            rebalanced = try rebalance(new_n, left, left.right);
+                            rebalanced_n = rebalanced.node;
+                            // _ = try self.do_level_order_transversal(rebalanced_n);
                             return rebalanced_n;
                         }
                         return rebalanced_n;
@@ -92,15 +94,17 @@ pub fn RedBlackTree(comptime T: type) type {
                     if (n.right) |right| {
                         var new_n = n;
                         new_n.height = height(n.left, right);
-                        std.debug.print("{s} ", .{" > "});
-                        _ = try self.do_level_order_transversal(new_n);
-                        var rebalanced_n = try rebalance(n, right, right.left);
-                        std.debug.print("{s} ", .{" >> "});
-                        _ = try self.do_level_order_transversal(new_n);
-                        if (new_n == rebalanced_n) {
-                            rebalanced_n = try rebalance(new_n, right, right.right);
-                            std.debug.print("{s} ", .{" >>> "});
-                            _ = try self.do_level_order_transversal(new_n);
+                        // std.debug.print("{s} ", .{" > "});
+                        // _ = try self.do_level_order_transversal(new_n);
+                        // std.debug.print("{s} ", .{" >> "});
+                        var rebalanced = try rebalance(n, right, right.left);
+                        var rebalanced_n = rebalanced.node;
+                        // _ = try self.do_level_order_transversal(rebalanced_n);
+                        if (!rebalanced.modified) {
+                            // std.debug.print("{s} ", .{" >>> "});
+                            rebalanced = try rebalance(new_n, right, right.right);
+                            rebalanced_n = rebalanced.node;
+                            // _ = try self.do_level_order_transversal(rebalanced_n);
                             return rebalanced_n;
                         }
                         return rebalanced_n;
@@ -177,7 +181,8 @@ pub fn RedBlackTree(comptime T: type) type {
 
         // https://www.youtube.com/watch?v=A3JZinzkMpk
         // https://www.cs.purdue.edu/homes/ayg/CS251/slides/chap13b.pdf
-        fn rebalance(self: *Node, child: *Node, grandchild: ?*Node) !*Node {
+        // Returns tuple of .{rebalancing done? (T/F), new grandparent node}
+        fn rebalance(self: *Node, child: *Node, grandchild: ?*Node) !struct { modified: bool, node: *Node } {
             if (grandchild) |gc| {
                 // Case 1: Both parent and uncle are red
                 //
@@ -198,9 +203,8 @@ pub fn RedBlackTree(comptime T: type) type {
                         u.color = Color.black;
                     }
                     self.color = Color.red;
-                    std.debug.print("{} ", .{gc.data});
                     std.debug.print("{s} ", .{"Case 1"});
-                    return self;
+                    return .{ .modified = true, .node = self };
                 } else if (red(gc) and red(child) and !red(uncle)) {
                     // Case 2-1: L uncle's is black and P, GP, L form a triangle (double rotation)
                     //
@@ -216,12 +220,12 @@ pub fn RedBlackTree(comptime T: type) type {
                     //
                     if (gc == child.left and child == self.right) {
                         // Double rotation
-                        self.right = try rotate_right(child);
-                        const node_to_return = try rotate_left(self);
-                        child.color = Color.black;
+                        self.right = try rotate_right(child); // child is P
+                        const node_to_return = try rotate_left(self); // self is GP
+                        gc.color = Color.black;
                         self.color = Color.red;
                         std.debug.print("{s} ", .{"Case 2-1"});
-                        return node_to_return;
+                        return .{ .modified = true, .node = node_to_return };
                     }
                     // Case 2-2: R uncle's is black and P, GP, R form a triangle (double rotation)
                     //
@@ -239,10 +243,10 @@ pub fn RedBlackTree(comptime T: type) type {
                         // Double rotation
                         self.left = try rotate_left(child);
                         const node_to_return = try rotate_right(self);
-                        child.color = Color.black;
+                        gc.color = Color.black;
                         self.color = Color.red;
                         std.debug.print("{s} ", .{"Case 2-2"});
-                        return node_to_return;
+                        return .{ .modified = true, .node = node_to_return };
                     }
                     // Case 3-1: L uncle's is black and P, GP, L form a line (single rotation)
                     //
@@ -261,7 +265,7 @@ pub fn RedBlackTree(comptime T: type) type {
                         child.color = Color.black;
                         self.color = Color.red;
                         std.debug.print("{s} ", .{"Case 3-1"});
-                        return node_to_return;
+                        return .{ .modified = true, .node = node_to_return };
                     }
                     // Case 3-2: L uncle's is black and P, GP, L form a line (single rotation)
                     //
@@ -280,17 +284,17 @@ pub fn RedBlackTree(comptime T: type) type {
                         child.color = Color.black; // P
                         self.color = Color.red; // GP
                         std.debug.print("{s} ", .{"Case 3-2"});
-                        return node_to_return;
+                        return .{ .modified = true, .node = node_to_return };
                     }
                 }
-                return self;
+                return .{ .modified = false, .node = self };
             } else {
-                return self;
+                return .{ .modified = false, .node = self };
             }
         }
 
         pub fn level_order_transversal(self: *Self) ![]u8 {
-            std.debug.print("{s} ", .{" || "});
+            // std.debug.print("{s} ", .{" || "});
 
             var str: []u8 = "";
 
@@ -315,7 +319,7 @@ pub fn RedBlackTree(comptime T: type) type {
 
                     str = try std.fmt.allocPrint(self.allocator, "{s}{}{s}{},", .{ str, rbn.data, color, rbn.height });
 
-                    std.debug.print("{}{s}{} ", .{ rbn.data, color, rbn.height });
+                    // std.debug.print("{}{s}{} ", .{ rbn.data, color, rbn.height });
                     if (rbn.left) |left| {
                         try q.push(left);
                     }
@@ -366,11 +370,29 @@ test "red black tree 2" {
     try rbtree.insert(9);
     try rbtree.insert(13);
     try rbtree.insert(23);
-    // var res = try rbtree.level_order_transversal();
-    // std.debug.assert(std.mem.eql(u8, "8B3,5B0,15R2,12B1,19B1,9R0,13R0,23R0,", res));
-    std.debug.print("{s} ", .{"\n\n"});
+    var res = try rbtree.level_order_transversal();
+    std.debug.assert(std.mem.eql(u8, "8B3,5B0,15R2,12B1,19B1,9R0,13R0,23R0,", res));
     try rbtree.insert(10);
-    const res = try rbtree.level_order_transversal();
-    std.debug.print("{s}{s} ", .{ "\n\n", res });
-    std.debug.assert(std.mem.eql(u8, "12B3,8R2,15R2,5B0,9B1,13B0,19B1,10R0,23R0,", res)); // case 2 - 15 should be BLACK
+    res = try rbtree.level_order_transversal();
+    std.debug.assert(std.mem.eql(u8, "12B3,8R2,15R2,5B0,9B1,13B0,19B1,10R0,23R0,", res)); // case 2 - 15 should be RED but is BLACK
+}
+
+test "red black tree 3" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var rbtree = RedBlackTree(u32).new(allocator);
+    try rbtree.insert(8);
+    try rbtree.insert(2);
+    try rbtree.insert(15);
+    try rbtree.insert(1);
+    try rbtree.insert(5);
+    try rbtree.insert(0);
+    try rbtree.insert(3);
+    try rbtree.insert(7);
+    var res = try rbtree.level_order_transversal();
+    std.debug.assert(std.mem.eql(u8, "8B3,2R2,15B0,1B1,5B1,0R0,3R0,7R0,", res));
+    try rbtree.insert(6);
+    res = try rbtree.level_order_transversal();
+    std.debug.assert(std.mem.eql(u8, "5B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,6R0,", res)); // case 2 - 15 should be RED but is BLACK
 }
