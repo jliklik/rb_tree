@@ -40,7 +40,7 @@ Insertion:
 
 Deletion:
 - BIG IDEA: check color of sibling
-- Deletion via method 1: Double black method (bottom-up)
+- Bottom up method:
   - https://www.cs.purdue.edu/homes/ayg/CS251/slides/chap13c.pdf
   - https://ebooks.inflibnet.ac.in/csp01/chapter/red-black-trees-ii/
   - if node has no children that are leaf nodes
@@ -62,7 +62,7 @@ Deletion:
     - Case 3: if sibling is red
           - adjustment
           - rotate around parent to bring sibling up
-- Deletion via method 2: Multi-case method (top-down)
+- Another way of looking at the bottom up method (pure actions, no theory)
   - https://www.youtube.com/watch?v=eoQpRtMpA9I
   - 3 nodes to consider: node being deleted, the replacement, x (differs depending on condition)
   - not really recursive, so many cases 0.0 

@@ -295,11 +295,83 @@ pub fn RedBlackTree(comptime T: type) type {
 
         pub fn delete(self: *Self, data: T) !void {}
 
-        /// Method 1: Double black (bottom-up approach): https://www.cs.purdue.edu/homes/ayg/CS251/slides/chap13c.pdf
-        /// Method 2: Multi-case https://www.youtube.com/watch?v=eoQpRtMpA9I
+        /// Double black case
+        /// http://mainline.brynmawr.edu/Courses/cs246/spring2016/lectures/16_RedBlackTrees.pdf
         pub fn do_delete(self: *Self, data: T, node: ?*Node) !*Node {
 
-            // get predecessor
+            // Step 1: Do normal BST deletion
+            // - may have to find successor and replace the node's value with the successor's value
+            // - then delete the successor node
+            // Note: Either we end up deleting the node itself (leaf), or we end up deleting the successor (leaf or only one child)
+            // Step 2: Recolor
+            // - look at the node to be deleted (this would be the successor if it applies)
+            // - Let u be the node to be deleted (either the original node or the successor node) and v be the child that replaces u.
+            // - if u has no children, v is NIL and black
+            // - if one child, v, the replacement, is u's child
+            // - u AND v cannot be red as then this would not have been a valid rb tree
+            // - 2a: if u is red and v is black, simply replace u with v - DONE
+            //    Before:      After:
+            //     U (R)        V(B)
+            //      \
+            //       V (B)
+            // - 2b: if u is black and v is red, then when v replaces u, mark v as black - DONE
+            //    Before:      After:         After2:
+            //     U(B)         V(R)           V(B!)
+            //      \
+            //       V(R)
+            // - 2c: if u is black and v is black - we get a DOUBLE BLACK - proceed to step 3
+            // Step 3: Dealing with DOUBLE BLACKS - when both u and v are black
+            // - v becomes DOUBLE BLACK when it replaces u
+            // - let the parent of V be P and its sibling be S
+            // - 3a: V's sibling, S, is red -> rotate P to bring up S, recolor S and P. Continue to cases 3b, 3c, 3d
+            //    Before:               After:            After2:
+            //        P(B)               S(R)              S(B!)
+            //      /     \             /   \             /   \
+            //     V(DB)  S(R)        P(B)  SR          P(R!)  SR
+            //           /   \       /    \            /    \
+            //          SL   SR     V(DB)  SL        V(DB)   SL
+            // - 3b: V's sibling, S, is black and has two black children
+            //    - recolor S red
+            //    - if P is red -> make P black (absorbs V's blackness) -> DONE
+            //    - if P is black -> now P is double black - reiterate up the tree (Call cases 3a-d on P)
+            //    - or in the case of pointer reinforcement, simply return the parent node as a double black
+            // - 3c: S is black, S's child further away from V is RED, other child (closer to V) is any color
+            //    - rotate P to bring S up
+            //    - swap colors of S and P, make S's RED child BLACK -> DONE
+            // - 3d: S is black, S's child further away from V is BLACK, other child (closer to V) is RED
+            //    - rotate S to bring up S's RED child
+            //    - swap color of S and S's original RED child
+            //    - proceed to case 3c
+            //
+            // So how can you do pointer reinforcement with this method??
+            // 1) if have to replace data with data in successor - swap data, but keep recursing until you reach the value to delete (will be in successor) then call DELETE
+            // 2) DELETE_FIX_UP should be called on the parent -> this allows us to return the same link for cases 3b, 3c, 3d
+            // - (eg. parent checks if child is double black)
+            // - But Case 3a causes problems -> we move the problem DOWN THE TREE instead of UP THE TREE, which means we can't get out of recursive call
+            //
+            // pseudocode
+            //
+            // fn delete(node) -> node {
+            //     if node.value == value {
+            //        step 2 - recolor;
+            //        return node;
+            //     } else if value > node.value {
+            //        node.right_child = delete(node.right_child)
+            //        return fix_double_black(node, right)
+            //     }
+            //     else { same thing for left child case }
+            //
+            //  }
+            //
+            //  fn fix double_black(node (P), dir) -> node {
+            //     if node.dir_child (V) has double black {
+            //         case 3b: 3b recolor, return node
+            //         case 3c: 3c rotate, recolor, return S in place of P
+            //         case 3d: 3d rotate and recolor, return SL in place of P
+            //         case 3a: 3a rotate and recolor, node.dir_child = fix_double_black(node.dir_child), return node
+            //     }
+            // }
+
         }
 
         pub fn level_order_transversal(self: *Self) ![]u8 {
@@ -343,7 +415,7 @@ pub fn RedBlackTree(comptime T: type) type {
     };
 }
 
-test "red black tree 1" {
+test "red black tree insert 1" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -366,7 +438,7 @@ test "red black tree 1" {
     std.debug.assert(std.mem.eql(u8, "3B3,2B0,5R2,4B0,10B1,9R0,", res)); // case 1
 }
 
-test "red black tree 2" {
+test "red black tree insert 2" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -386,7 +458,7 @@ test "red black tree 2" {
     std.debug.assert(std.mem.eql(u8, "12B3,8R2,15R2,5B0,9B1,13B0,19B1,10R0,23R0,", res));
 }
 
-test "red black tree 3" {
+test "red black tree insert 3" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
