@@ -5,24 +5,25 @@ pub fn RedBlackTree(comptime T: type) type {
     return struct {
         const Self = @This();
 
-        pub const Color = enum { black, red };
+        pub const Color = enum { red, black, double_black };
+
+        pub const Direction = enum(u1) { left = 0, right = 1 };
 
         pub const RotationError = error{ right_child_is_nil, left_child_is_nil };
 
         pub const Node = struct {
-            left: ?*Node = null,
-            right: ?*Node = null,
+            children: [2]?*Node = [_]?*Node{ null, null },
             data: T,
             color: Color = Color.black,
             frequency: u32 = 1,
             height: u32 = 0,
 
             pub fn set_left(self: *Node, left_node: *Node) void {
-                self.left = left_node;
+                self.children[Direction.left] = left_node;
             }
 
-            pub fn set_right(self: *Node, left_node: *Node) void {
-                self.left = left_node;
+            pub fn set_right(self: *Node, right_node: *Node) void {
+                self.children[Direction.right] = right_node;
             }
         };
 
@@ -55,7 +56,7 @@ pub fn RedBlackTree(comptime T: type) type {
         /// By default, new nodes created should be the color red
         fn create_node(self: *Self, data: T) !*Node {
             const node = try self.allocator.create(Node);
-            node.* = .{ .data = data, .left = null, .right = null, .color = Color.red, .frequency = 1, .height = 0 };
+            node.* = .{ .data = data, .children = [_]?*Node{ null, null }, .color = Color.red, .frequency = 1, .height = 0 };
             return node;
         }
 
@@ -70,44 +71,35 @@ pub fn RedBlackTree(comptime T: type) type {
             if (node) |n| {
                 // std.debug.print("At node: {} ", .{n.data});
                 if (data < n.data) {
-                    n.left = try do_insert(self, data, n.left);
-                    if (n.left) |left| {
+                    n.children[Direction.left] = try do_insert(self, data, n.children[Direction.left]);
+                    if (n.children[Direction.left]) |left| {
                         var new_n = n;
-                        new_n.height = height(left, n.right);
-                        // std.debug.print("{s} ", .{" < "});
-                        // _ = try self.do_level_order_transversal(new_n);
-                        // std.debug.print("{s} ", .{" << "});
-                        var rebalanced = try rebalance(new_n, left, left.left);
-                        var rebalanced_n = rebalanced.node;
-                        // _ = try self.do_level_order_transversal(rebalanced_n);
+                        new_n.height = height(left, n.children[Direction.right]);
+                        var rebalanced =
+                            try rebalance(new_n, Direction.left, Direction.left);
+                        var rebalanced_node = rebalanced.node;
                         if (!rebalanced.modified) {
-                            // std.debug.print("{s} ", .{" <<< "});
-                            rebalanced = try rebalance(new_n, left, left.right);
-                            rebalanced_n = rebalanced.node;
-                            // _ = try self.do_level_order_transversal(rebalanced_n);
-                            return rebalanced_n;
+                            rebalanced =
+                                try rebalance(new_n, Direction.left, Direction.right);
+                            rebalanced_node = rebalanced.node;
+                            return rebalanced_node;
                         }
-                        return rebalanced_n;
+                        return rebalanced_node;
                     }
                 } else if (data > n.data) {
-                    n.right = try do_insert(self, data, n.right);
-                    if (n.right) |right| {
+                    n.children[Direction.right] = try do_insert(self, data, n.children[Direction.right]);
+                    if (n.children[Direction.right]) |right| {
                         var new_n = n;
-                        new_n.height = height(n.left, right);
-                        // std.debug.print("{s} ", .{" > "});
-                        // _ = try self.do_level_order_transversal(new_n);
-                        // std.debug.print("{s} ", .{" >> "});
-                        var rebalanced = try rebalance(n, right, right.left);
-                        var rebalanced_n = rebalanced.node;
-                        // _ = try self.do_level_order_transversal(rebalanced_n);
+                        new_n.height = height(n.children[Direction.left], right);
+                        var rebalanced =
+                            try rebalance(n, Direction.right, Direction.left);
+                        var rebalanced_node = rebalanced.node;
                         if (!rebalanced.modified) {
-                            // std.debug.print("{s} ", .{" >>> "});
-                            rebalanced = try rebalance(new_n, right, right.right);
-                            rebalanced_n = rebalanced.node;
-                            // _ = try self.do_level_order_transversal(rebalanced_n);
-                            return rebalanced_n;
+                            rebalanced = try rebalance(new_n, Direction.right, Direction.right);
+                            rebalanced_node = rebalanced.node;
+                            return rebalanced_node;
                         }
-                        return rebalanced_n;
+                        return rebalanced_node;
                     }
                 } else {
                     n.frequency += 1;
@@ -120,10 +112,10 @@ pub fn RedBlackTree(comptime T: type) type {
         }
 
         fn get_sibling(parent: *Node, node: *Node) ?*Node {
-            if (parent.left == node) {
-                return parent.right;
+            if (parent.children[Direction.left] == node) {
+                return parent.children[Direction.right];
             } else {
-                return parent.left;
+                return parent.children[Direction.left];
             }
         }
 
@@ -135,194 +127,234 @@ pub fn RedBlackTree(comptime T: type) type {
             }
         }
 
-        // https://www.happycoders.eu/algorithms/avl-tree-java/
-        //     N             R
-        //    / \           / \
-        //   L   R         N   RR
-        //      / \       / \
-        //    RL   RR    L   RL
-        // Step 1: N right child becomes RL
-        // Step 2: R left child becomes node
-        fn rotate_left(node: *Node) !*Node {
-            const right_child = node.right;
-            if (right_child) |r| {
-                node.right = r.left;
-                r.left = node;
-                // update heights of N and R
-                node.height = height(node.left, node.right);
-                r.height = height(r.left, r.right);
+        /// Comments use left rotation as example
+        /// Left rotation:
+        /// https://www.happycoders.eu/algorithms/avl-tree-java/
+        ///     N             R
+        ///    / \           / \
+        ///   L   R         N   RR
+        ///      / \       / \
+        ///    RL   RR    L   RL
+        /// Step 1: N right child becomes RL
+        /// Step 2: R left child becomes node
+        ///
+        /// Right rotation
+        ///         N             L
+        ///        / \           / \
+        ///       L   R         LL  N
+        ///      / \               / \
+        ///     LL  LR            LR  R
+        /// Step 1: N left child becomes LR
+        /// Step 2: L right child becomes node
+        fn rotate(node: *Node, dir: Direction) !*Node {
+            const child = node.children[!dir]; // grab child in opposite direction of rotation
+            if (child) |r| {
+                node.children[!dir] = r.children[dir]; // N's right child becomes R's left child
+                r.children[dir] = node; // R's left child becomes the node
+                node.height = height(node.children[Direction.left], node.children[Direction.right]); // update heights of N and R
+                r.height = height(r.children[Direction.left], r.children[Direction.right]);
                 return r;
-            } else {
+            } else if (dir == 0) {
                 return RotationError.right_child_is_nil;
-            }
-        }
-
-        // https://www.happycoders.eu/algorithms/avl-tree-java/
-        //         N             L
-        //        / \           / \
-        //       L   R         LL  N
-        //      / \               / \
-        //     LL  LR            LR  R
-        // Step 1: N left child becomes LR
-        // Step 2: L right child becomes node
-        fn rotate_right(node: *Node) !*Node {
-            const left_child = node.left;
-            if (left_child) |l| {
-                node.left = l.right;
-                l.right = node;
-                // update heights of N and L
-                node.height = height(node.left, node.right);
-                l.height = height(l.left, l.right);
-                return l;
             } else {
-                return RotationError.right_child_is_nil;
+                return RotationError.left_child_is_nil;
             }
         }
 
         /// https://www.youtube.com/watch?v=A3JZinzkMpk
         /// https://www.cs.purdue.edu/homes/ayg/CS251/slides/chap13b.pdf
         /// Returns struct of .{modified? (T/F), new grandparent node}
-        fn rebalance(self: *Node, child: *Node, grandchild: ?*Node) !struct { modified: bool, node: *Node } {
-            if (grandchild) |gc| {
-                // Case 1: Both parent and uncle are red
-                //
-                //      Before:                  After:
-                //
-                //      GP(B)                   GP(R!)
-                //     /    \                  /     \
-                //    P(R)   U(R)            P(B!)   U(B!)
-                //   /                      /
-                //  Z(R)                  Z(R)
-                //
-                // Set P and U to black
-                // Set GP to Red
-                const uncle = get_sibling(self, child);
-                if (red(gc) and red(uncle)) {
-                    child.color = Color.black;
-                    if (uncle) |u| {
-                        u.color = Color.black;
-                    }
-                    self.color = Color.red;
-                    std.debug.print("{s} ", .{"Case 1"});
-                    return .{ .modified = true, .node = self };
-                } else if (red(gc) and red(child) and !red(uncle)) {
-                    // Case 2-1: L uncle's is black and P, GP, L form a triangle (double rotation)
-                    //
-                    //          Before:           After rotate right on P:     After rotate left on GP:          Recolor:
-                    //
-                    //           GP(B)                 GP(B)                          L(R)                         L(B!)
-                    //          /   \                 /   \                          /    \                       /    \
-                    //        U(B)   P(R)           U(B)   L(R)                    GP(B)   P(R)               GP(R!)    P(R)
-                    //               /   \                /   \                    / \     /  \                / \      /  \
-                    //             L(R)   R             LL    P(R)              U(B)  LL  LR   R            U(B)  LL   LR   R
-                    //            / \                         /  \
-                    //          LL   LR                     LR    R
-                    //
-                    if (gc == child.left and child == self.right) {
-                        // Double rotation
-                        self.right = try rotate_right(child); // child is P
-                        const node_to_return = try rotate_left(self); // self is GP
-                        gc.color = Color.black;
+        fn rebalance(self: *Node, dir_child: Direction, dir_grandchild: Direction) !struct { modified: bool, node: *Node } {
+            const child = self.children[dir_child];
+            if (child) |c| {
+                const grandchild = c.children[dir_grandchild];
+                if (grandchild) |gc| {
+                    const uncle = get_sibling(self, c);
+                    if (red(gc) and red(uncle)) {
+                        // Case 1: Both parent and uncle are red
+                        //
+                        //      Before:                  After:
+                        //
+                        //      GP(B)                   GP(R!)
+                        //     /    \                  /     \
+                        //    P(R)   U(R)            P(B!)   U(B!)
+                        //   /                      /
+                        //  Z(R)                  Z(R)
+                        //
+                        // Set P and U to black
+                        // Set GP to Red
+                        c.color = Color.black;
+                        if (uncle) |u| {
+                            u.color = Color.black;
+                        }
                         self.color = Color.red;
-                        std.debug.print("{s} ", .{"Case 2-1"});
-                        return .{ .modified = true, .node = node_to_return };
+                        std.debug.print("{s} ", .{"Case 1"});
+                        return .{ .modified = true, .node = self };
+                    } else if (red(gc) and red(c) and !red(uncle)) {
+                        if (dir_child != dir_grandchild) {
+                            // Double rotation
+                            // Case 2-1: L uncle's is black and P, GP, L form a triangle (double rotation)
+                            //
+                            //          Before:           After rotate right on P:     After rotate left on GP:          Recolor:
+                            //
+                            //           GP(B)                 GP(B)                          L(R)                         L(B!)
+                            //          /   \                 /   \                          /    \                       /    \
+                            //        U(B)   P(R)           U(B)   L(R)                    GP(B)   P(R)               GP(R!)    P(R)
+                            //               /   \                /   \                    / \     /  \                / \      /  \
+                            //             L(R)   R             LL    P(R)              U(B)  LL  LR   R            U(B)  LL   LR   R
+                            //            / \                         /  \
+                            //          LL   LR                     LR    R
+                            //
+                            // Case 2-2: R uncle's is black and P, GP, R form a triangle (double rotation)
+                            //
+                            //          Before:           After rotate left on P:     After rotate right on GP:          Recolor:
+                            //
+                            //          GP(B)                    GP(B)                      R(R)                           R(B!)
+                            //          /   \                    /   \                     /   \                          /   \
+                            //        P(R)   U(B)              R(R)  U(B)                P(R)  GP(B)                    P(R)  GP(R!)
+                            //        /   \                    /  \                     /  \   /  \                    /  \   /  \
+                            //       L   R(R)               P(R)   RR                  L   RL RR  U(B)                L   RL RR  U(B)
+                            //            / \               /  \
+                            //          RL   RR            L    RL
+                            //
+                            self.children[dir_child] = try rotate(child, dir_child); // child is P
+                            const node_to_return = try rotate(self, dir_grandchild); // self is GP
+                            gc.color = Color.black;
+                            self.color = Color.red;
+                            std.debug.print("{s} ", .{"Case 2-1/2-2"});
+                            return .{ .modified = true, .node = node_to_return };
+                        } else {
+                            // Single rotation
+                            // Case 3-1: L uncle's is black and P, GP, L form a line (single rotation)
+                            //
+                            //          Before:              After rotate left on GP:         Recolor:
+                            //
+                            //           GP(B)                     P(R)                         P(B!)
+                            //          /   \                     /    \                       /    \
+                            //        U(B)   P(R)               GP(B)   R(R)               GP(R!)    R(R)
+                            //              /   \               / \     /  \                / \      /  \
+                            //             L    R(R)         U(B)  L  RL    RR           U(B)  L   RL    RR
+                            //                  /  \
+                            //                RL    RR
+                            //
+                            const node_to_return = try rotate(self, !dir_child);
+                            child.color = Color.black;
+                            self.color = Color.red;
+                            std.debug.print("{s} ", .{"Case 3-1/3-2"});
+                            return .{ .modified = true, .node = node_to_return };
+                        }
                     }
-                    // Case 2-2: R uncle's is black and P, GP, R form a triangle (double rotation)
-                    //
-                    //          Before:           After rotate left on P:     After rotate right on GP:          Recolor:
-                    //
-                    //          GP(B)                    GP(B)                      R(R)                           R(B!)
-                    //          /   \                    /   \                     /   \                          /   \
-                    //        P(R)   U(B)              R(R)  U(B)                P(R)  GP(B)                    P(R)  GP(R!)
-                    //        /   \                    /  \                     /  \   /  \                    /  \   /  \
-                    //       L   R(R)               P(R)   RR                  L   RL RR  U(B)                L   RL RR  U(B)
-                    //            / \               /  \
-                    //          RL   RR            L    RL
-                    //
-                    else if (gc == child.right and child == self.left) {
-                        // Double rotation
-                        self.left = try rotate_left(child);
-                        const node_to_return = try rotate_right(self);
-                        gc.color = Color.black;
-                        self.color = Color.red;
-                        std.debug.print("{s} ", .{"Case 2-2"});
-                        return .{ .modified = true, .node = node_to_return };
-                    }
-                    // Case 3-1: L uncle's is black and P, GP, L form a line (single rotation)
-                    //
-                    //          Before:              After rotate left on GP:         Recolor:
-                    //
-                    //           GP(B)                     P(R)                         P(B!)
-                    //          /   \                     /    \                       /    \
-                    //        U(B)   P(R)               GP(B)   R(R)               GP(R!)    R(R)
-                    //              /   \               / \     /  \                / \      /  \
-                    //             L    R(R)         U(B)  L  RL    RR           U(B)  L   RL    RR
-                    //                  /  \
-                    //                RL    RR
-                    //
-                    else if (gc == child.right and child == self.right) {
-                        const node_to_return = try rotate_left(self);
-                        child.color = Color.black;
-                        self.color = Color.red;
-                        std.debug.print("{s} ", .{"Case 3-1"});
-                        return .{ .modified = true, .node = node_to_return };
-                    }
-                    // Case 3-2: L uncle's is black and P, GP, L form a line (single rotation)
-                    //
-                    //          Before:              After rotate right on GP:        Recolor:
-                    //
-                    //           GP(B)                    P(R)                         P(B!)
-                    //          /   \                    /    \                       /    \
-                    //        P(R)   U(B)             L(R)     GP(B)               L(R)   GP(R!)
-                    //       /   \                    /  \     /  \                / \      /  \
-                    //     L(R)   R                 LL   LR   R   U(B)           LL   LR   R   U(B)
-                    //     /  \
-                    //   LL    LR
-                    //
-                    else if (gc == child.left and child == self.left) {
-                        const node_to_return = try rotate_right(self);
-                        child.color = Color.black; // P
-                        self.color = Color.red; // GP
-                        std.debug.print("{s} ", .{"Case 3-2"});
-                        return .{ .modified = true, .node = node_to_return };
-                    }
+                    return .{ .modified = false, .node = self };
+                } else {
+                    return .{ .modified = false, .node = self };
                 }
-                return .{ .modified = false, .node = self };
             } else {
                 return .{ .modified = false, .node = self };
             }
         }
 
-        pub fn delete(self: *Self, data: T) !void {}
+        /// Find successor node (assumes right subtree is NOT nil)
+        /// First go right, then go all the way to the left
+        fn get_successor_when_right_subtree_exists(self: *Self, node: ?*Node) ?Node {
+            if (node.children[Direction.right]) |right| {
+                return do_get_successor_when_right_subtree_exists(self, right);
+            }
+            return null;
+        }
+
+        fn do_get_successor_when_right_subtree_exists(self: *Self, node: ?*Node) ?Node {
+            if (node.children[Direction.left]) |left| {
+                return do_get_successor_when_right_subtree_exists(self, left);
+            } else {
+                return node;
+            }
+        }
+
+        pub fn delete(self: *Self, data: T) !void {
+            self.root = do_delete(self, data, self.root);
+        }
 
         /// Double black case
         /// http://mainline.brynmawr.edu/Courses/cs246/spring2016/lectures/16_RedBlackTrees.pdf
-        pub fn do_delete(self: *Self, data: T, node: ?*Node) !*Node {
+        pub fn do_delete(self: *Self, data: T, node: ?*Node) !?*Node {
+            if (node == null) {
+                // Failed to find item to delete
+                return null;
+            }
 
-            // Step 1: Do normal BST deletion
+            // DELETE Step 1: Do normal BST deletion
             // - may have to find successor and replace the node's value with the successor's value
             // - then delete the successor node
             // Note: Either we end up deleting the node itself (leaf), or we end up deleting the successor (leaf or only one child)
-            // Step 2: Recolor
-            // - look at the node to be deleted (this would be the successor if it applies)
-            // - Let u be the node to be deleted (either the original node or the successor node) and v be the child that replaces u.
-            // - if u has no children, v is NIL and black
-            // - if one child, v, the replacement, is u's child
-            // - u AND v cannot be red as then this would not have been a valid rb tree
-            // - 2a: if u is red and v is black, simply replace u with v - DONE
-            //    Before:      After:
-            //     U (R)        V(B)
-            //      \
-            //       V (B)
-            // - 2b: if u is black and v is red, then when v replaces u, mark v as black - DONE
-            //    Before:      After:         After2:
-            //     U(B)         V(R)           V(B!)
-            //      \
-            //       V(R)
-            // - 2c: if u is black and v is black - we get a DOUBLE BLACK - proceed to step 3
-            // Step 3: Dealing with DOUBLE BLACKS - when both u and v are black
-            // - v becomes DOUBLE BLACK when it replaces u
-            // - let the parent of V be P and its sibling be S
+
+            if (node.data == data) {
+                if (node.children[Direction.left]) |left| {
+                    if (node.children[Direction.right]) |right| {
+                        // 2 children
+                        var successor = get_successor_when_right_subtree_exists(right);
+                        const temp = node.data;
+                        node.data = successor.?.data; // put node data inside successor, keep going down the tree
+                        successor.?.data = temp;
+                        node.children[Direction.right] = do_delete(self, data, node.children[Direction.right]);
+                        var fixed = fix_double_black(self, node, node.children[Direction.left]);
+                        if (!fixed.modified) {
+                            return fix_double_black(self, node, right);
+                        }
+                    } else {
+                        // 1 left child - the replacement, v, is node.children[Direction.left]
+                        delete_recolor(node, left); // TODO: free memory?
+                        return left;
+                    }
+                } else if (node.children[Direction.right]) |right| {
+                    // 1 right child - the replacement, v, is node.children[Direction.right]
+                    delete_recolor(node, right); // TODO: free memory?
+                    return right;
+                } else {
+                    // 0 children - return a sentinel as v
+                    return null;
+                }
+            } else if (data > node.data) { // recurse otherwise if node.data != data
+                node.children[Direction.right] = do_delete(self, data, node.children[Direction.right]);
+                var new_node = fix_double_black(self, node, node.children[Direction.left]);
+                return fix_double_black(self, node, node.children[Direction.right]);
+            } else {
+                node.children[Direction.left] = do_delete(self, data, node.children[Direction.left]);
+                var new_node = fix_double_black(self, node, node.children[Direction.left]);
+                return fix_double_black(self, node, node.children[Direction.right]);
+            }
+        }
+
+        // DELETE Step 2: Recolor
+        // - look at the node to be deleted (this would be the successor if it applies)
+        // - Let u be the node to be deleted (either the original node or the successor node) and v be the child that replaces u.
+        // - if u has no children, v is NIL and black
+        // - if u has one one child, v, the replacement, is u's child
+        // - u CANNOT have 2 children, otherwise we have not found the successor properly
+        // - u AND v cannot be red as then this would not have been a valid rb tree
+        // - 2a: if u is red and v is black, simply replace u with v - DONE
+        //    Before:      After:
+        //     U (R)        V(B)
+        //      \
+        //       V (B)
+        // - 2b: if u is black and v is red, then when v replaces u, mark v as black - DONE
+        //    Before:      After:         After2:
+        //     U(B)         V(R)           V(B!)
+        //      \
+        //       V(R)
+        // - 2c: if u is black and v is black - we get a DOUBLE BLACK - proceed to step 3
+        fn delete_recolor(u: *Node, v: *Node) void {
+            if ((u.color == Color.black) and (v.color == Color.red)) {
+                v.color = Color.black;
+            } else if ((u.color == Color.black) and (v.color == Color.black)) {
+                v.color = Color.double_black;
+            }
+        }
+
+        // Step 3: Dealing with DOUBLE BLACKS - when both U and V are black
+        // - V becomes DOUBLE BLACK when it replaces U
+        // - let P = the parent of V
+        // - let S = the sibling of V
+        fn fix_double_black(self: *Self, node: *Node, child: ?*Node) ?*Node {
             // - 3a: V's sibling, S, is red -> rotate P to bring up S, recolor S and P. Continue to cases 3b, 3c, 3d
             //    Before:               After:            After2:
             //        P(B)               S(R)              S(B!)
@@ -330,49 +362,62 @@ pub fn RedBlackTree(comptime T: type) type {
             //     V(DB)  S(R)        P(B)  SR          P(R!)  SR
             //           /   \       /    \            /    \
             //          SL   SR     V(DB)  SL        V(DB)   SL
-            // - 3b: V's sibling, S, is black and has two black children
-            //    - recolor S red
-            //    - if P is red -> make P black (absorbs V's blackness) -> DONE
-            //    - if P is black -> now P is double black - reiterate up the tree (Call cases 3a-d on P)
-            //    - or in the case of pointer reinforcement, simply return the parent node as a double black
-            // - 3c: S is black, S's child further away from V is RED, other child (closer to V) is any color
-            //    - rotate P to bring S up
-            //    - swap colors of S and P, make S's RED child BLACK -> DONE
-            // - 3d: S is black, S's child further away from V is BLACK, other child (closer to V) is RED
-            //    - rotate S to bring up S's RED child
-            //    - swap color of S and S's original RED child
-            //    - proceed to case 3c
-            //
-            // So how can you do pointer reinforcement with this method??
-            // 1) if have to replace data with data in successor - swap data, but keep recursing until you reach the value to delete (will be in successor) then call DELETE
-            // 2) DELETE_FIX_UP should be called on the parent -> this allows us to return the same link for cases 3b, 3c, 3d
-            // - (eg. parent checks if child is double black)
-            // - But Case 3a causes problems -> we move the problem DOWN THE TREE instead of UP THE TREE, which means we can't get out of recursive call
-            //
-            // pseudocode
-            //
-            // fn delete(node) -> node {
-            //     if node.value == value {
-            //        step 2 - recolor;
-            //        return node;
-            //     } else if value > node.value {
-            //        node.right_child = delete(node.right_child)
-            //        return fix_double_black(node, right)
-            //     }
-            //     else { same thing for left child case }
-            //
-            //  }
-            //
-            //  fn fix double_black(node (P), dir) -> node {
-            //     if node.dir_child (V) has double black {
-            //         case 3b: 3b recolor, return node
-            //         case 3c: 3c rotate, recolor, return S in place of P
-            //         case 3d: 3d rotate and recolor, return SL in place of P
-            //         case 3a: 3a rotate and recolor, node.dir_child = fix_double_black(node.dir_child), return node
-            //     }
-            // }
 
+            if (child) |v| {} else {
+
+                // rotate to bring S up
+
+                // continue fix_double_black
+
+                return node;
+            }
         }
+
+        // - 3b: V's sibling, S, is black and has two black children
+        //    - recolor S red
+        //    - if P is red -> make P black (absorbs V's blackness) -> DONE
+        //    - if P is black -> now P is double black - reiterate up the tree (Call cases 3a-d on P)
+        //    - or in the case of pointer reinforcement, simply return the parent node as a double black
+        // - 3c: S is black, S's child further away from V is RED, other child (closer to V) is any color
+        //    - rotate P to bring S up
+        //    - swap colors of S and P, make S's RED child BLACK -> DONE
+        // - 3d: S is black, S's child further away from V is BLACK, other child (closer to V) is RED
+        //    - rotate S to bring up S's RED child
+        //    - swap color of S and S's original RED child
+        //    - proceed to case 3c
+        //
+        // So how can you do pointer reinforcement with this method??
+        // 1) if have to replace data with data in successor - swap data, but keep recursing until you reach the value to delete (will be in successor) then call DELETE
+        // 2) DELETE_FIX_UP should be called on the parent -> this allows us to return the same link for cases 3b, 3c, 3d
+        // - (eg. parent checks if child is double black)
+        // - But Case 3a causes problems -> we move the problem DOWN THE TREE instead of UP THE TREE, which means we can't get out of recursive call just yet
+        //   - we have to recurse down the tree again, calling delete_fix_up on P again
+        //
+        // pseudocode
+        //
+        // fn delete(node) -> node {
+        //     if node.value == value {
+        //        step 2 - recolor;
+        //        return node;
+        //     } else if value > node.value {
+        //        node.children[Direction.right] = delete(node.children[Direction.right])
+        //        return fix_double_black(node, right)
+        //     }
+        //     else {
+        //        node.children[Direction.left]_child = delete(node.children[Direction.left])
+        //        return fix_double_black(node, left)
+        //     }
+        //
+        //  }
+        //
+        //  fn fix double_black(node (P), dir) -> node {
+        //     if node.dir_child (V) has double black {
+        //         case 3b: 3b recolor, return node
+        //         case 3c: 3c rotate, recolor, return S in place of P
+        //         case 3d: 3d rotate and recolor, return SL in place of P
+        //         case 3a: 3a rotate and recolor, node.dir_child = fix_double_black(node.dir_child), return node
+        //     }
+        // }
 
         pub fn level_order_transversal(self: *Self) ![]u8 {
             // std.debug.print("{s} ", .{" || "});
@@ -401,10 +446,10 @@ pub fn RedBlackTree(comptime T: type) type {
                     str = try std.fmt.allocPrint(self.allocator, "{s}{}{s}{},", .{ str, rbn.data, color, rbn.height });
 
                     // std.debug.print("{}{s}{} ", .{ rbn.data, color, rbn.height });
-                    if (rbn.left) |left| {
+                    if (rbn.children[Direction.left]) |left| {
                         try q.push(left);
                     }
-                    if (rbn.right) |right| {
+                    if (rbn.children[Direction.right]) |right| {
                         try q.push(right);
                     }
                 }
