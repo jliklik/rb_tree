@@ -19,11 +19,11 @@ pub fn RedBlackTree(comptime T: type) type {
             height: u32 = 0,
 
             pub fn set_left(self: *Node, left_node: *Node) void {
-                self.children[Direction.left] = left_node;
+                self.children[@intFromEnum(Direction.left)] = left_node;
             }
 
             pub fn set_right(self: *Node, right_node: *Node) void {
-                self.children[Direction.right] = right_node;
+                self.children[@intFromEnum(Direction.right)] = right_node;
             }
         };
 
@@ -33,6 +33,13 @@ pub fn RedBlackTree(comptime T: type) type {
 
         pub fn new(allocator: std.mem.Allocator) Self {
             return .{ .black_height = 0, .root = null, .allocator = allocator };
+        }
+
+        pub fn flip_dir(dir: Direction) Direction {
+            if (dir == Direction.left) {
+                return Direction.right;
+            }
+            return Direction.left;
         }
 
         /// Returns the height of a node
@@ -71,35 +78,28 @@ pub fn RedBlackTree(comptime T: type) type {
             if (node) |n| {
                 // std.debug.print("At node: {} ", .{n.data});
                 if (data < n.data) {
-                    n.children[Direction.left] = try do_insert(self, data, n.children[Direction.left]);
-                    if (n.children[Direction.left]) |left| {
+                    n.children[@intFromEnum(Direction.left)] = try do_insert(self, data, n.children[@intFromEnum(Direction.left)]);
+                    if (n.children[@intFromEnum(Direction.left)]) |left| {
                         var new_n = n;
-                        new_n.height = height(left, n.children[Direction.right]);
-                        var rebalanced =
+                        new_n.height = height(left, n.children[@intFromEnum(Direction.right)]);
+                        var res =
                             try rebalance(new_n, Direction.left, Direction.left);
-                        var rebalanced_node = rebalanced.node;
-                        if (!rebalanced.modified) {
-                            rebalanced =
-                                try rebalance(new_n, Direction.left, Direction.right);
-                            rebalanced_node = rebalanced.node;
-                            return rebalanced_node;
+                        if (!res.modified) {
+                            res = try rebalance(new_n, Direction.left, Direction.right);
                         }
-                        return rebalanced_node;
+                        return res.node;
                     }
                 } else if (data > n.data) {
-                    n.children[Direction.right] = try do_insert(self, data, n.children[Direction.right]);
-                    if (n.children[Direction.right]) |right| {
+                    n.children[@intFromEnum(Direction.right)] = try do_insert(self, data, n.children[@intFromEnum(Direction.right)]);
+                    if (n.children[@intFromEnum(Direction.right)]) |right| {
                         var new_n = n;
-                        new_n.height = height(n.children[Direction.left], right);
-                        var rebalanced =
+                        new_n.height = height(n.children[@intFromEnum(Direction.left)], right);
+                        var res =
                             try rebalance(n, Direction.right, Direction.left);
-                        var rebalanced_node = rebalanced.node;
-                        if (!rebalanced.modified) {
-                            rebalanced = try rebalance(new_n, Direction.right, Direction.right);
-                            rebalanced_node = rebalanced.node;
-                            return rebalanced_node;
+                        if (!res.modified) {
+                            res = try rebalance(new_n, Direction.right, Direction.right);
                         }
-                        return rebalanced_node;
+                        return res.node;
                     }
                 } else {
                     n.frequency += 1;
@@ -112,10 +112,10 @@ pub fn RedBlackTree(comptime T: type) type {
         }
 
         fn get_sibling(parent: *Node, node: *Node) ?*Node {
-            if (parent.children[Direction.left] == node) {
-                return parent.children[Direction.right];
+            if (parent.children[@intFromEnum(Direction.left)] == node) {
+                return parent.children[@intFromEnum(Direction.right)];
             } else {
-                return parent.children[Direction.left];
+                return parent.children[@intFromEnum(Direction.left)];
             }
         }
 
@@ -128,7 +128,7 @@ pub fn RedBlackTree(comptime T: type) type {
         }
 
         /// Comments use left rotation as example
-        /// Left rotation:
+        /// Left rotation about N:
         /// https://www.happycoders.eu/algorithms/avl-tree-java/
         ///     N             R
         ///    / \           / \
@@ -138,7 +138,7 @@ pub fn RedBlackTree(comptime T: type) type {
         /// Step 1: N right child becomes RL
         /// Step 2: R left child becomes node
         ///
-        /// Right rotation
+        /// Right rotation about N:
         ///         N             L
         ///        / \           / \
         ///       L   R         LL  N
@@ -147,14 +147,14 @@ pub fn RedBlackTree(comptime T: type) type {
         /// Step 1: N left child becomes LR
         /// Step 2: L right child becomes node
         fn rotate(node: *Node, dir: Direction) !*Node {
-            const child = node.children[!dir]; // grab child in opposite direction of rotation
+            const child = node.children[~@intFromEnum(dir)]; // grab child in opposite direction of rotation
             if (child) |r| {
-                node.children[!dir] = r.children[dir]; // N's right child becomes R's left child
-                r.children[dir] = node; // R's left child becomes the node
-                node.height = height(node.children[Direction.left], node.children[Direction.right]); // update heights of N and R
-                r.height = height(r.children[Direction.left], r.children[Direction.right]);
+                node.children[~@intFromEnum(dir)] = r.children[@intFromEnum(dir)]; // N's right child becomes R's left child
+                r.children[@intFromEnum(dir)] = node; // R's left child becomes the node
+                node.height = height(node.children[@intFromEnum(Direction.left)], node.children[@intFromEnum(Direction.right)]); // update heights of N and R
+                r.height = height(r.children[@intFromEnum(Direction.left)], r.children[@intFromEnum(Direction.right)]);
                 return r;
-            } else if (dir == 0) {
+            } else if (dir == Direction.left) {
                 return RotationError.right_child_is_nil;
             } else {
                 return RotationError.left_child_is_nil;
@@ -165,9 +165,9 @@ pub fn RedBlackTree(comptime T: type) type {
         /// https://www.cs.purdue.edu/homes/ayg/CS251/slides/chap13b.pdf
         /// Returns struct of .{modified? (T/F), new grandparent node}
         fn rebalance(self: *Node, dir_child: Direction, dir_grandchild: Direction) !struct { modified: bool, node: *Node } {
-            const child = self.children[dir_child];
+            const child = self.children[@intFromEnum(dir_child)];
             if (child) |c| {
-                const grandchild = c.children[dir_grandchild];
+                const grandchild = c.children[@intFromEnum(dir_grandchild)];
                 if (grandchild) |gc| {
                     const uncle = get_sibling(self, c);
                     if (red(gc) and red(uncle)) {
@@ -217,7 +217,7 @@ pub fn RedBlackTree(comptime T: type) type {
                             //            / \               /  \
                             //          RL   RR            L    RL
                             //
-                            self.children[dir_child] = try rotate(child, dir_child); // child is P
+                            self.children[@intFromEnum(dir_child)] = try rotate(c, dir_child); // child is P
                             const node_to_return = try rotate(self, dir_grandchild); // self is GP
                             gc.color = Color.black;
                             self.color = Color.red;
@@ -237,8 +237,8 @@ pub fn RedBlackTree(comptime T: type) type {
                             //                  /  \
                             //                RL    RR
                             //
-                            const node_to_return = try rotate(self, !dir_child);
-                            child.color = Color.black;
+                            const node_to_return = try rotate(self, flip_dir(dir_child));
+                            c.color = Color.black;
                             self.color = Color.red;
                             std.debug.print("{s} ", .{"Case 3-1/3-2"});
                             return .{ .modified = true, .node = node_to_return };
@@ -256,14 +256,14 @@ pub fn RedBlackTree(comptime T: type) type {
         /// Find successor node (assumes right subtree is NOT nil)
         /// First go right, then go all the way to the left
         fn get_successor_when_right_subtree_exists(self: *Self, node: ?*Node) ?Node {
-            if (node.children[Direction.right]) |right| {
+            if (node.children[@intFromEnum(Direction.right)]) |right| {
                 return do_get_successor_when_right_subtree_exists(self, right);
             }
             return null;
         }
 
         fn do_get_successor_when_right_subtree_exists(self: *Self, node: ?*Node) ?Node {
-            if (node.children[Direction.left]) |left| {
+            if (node.children[@intFromEnum(Direction.left)]) |left| {
                 return do_get_successor_when_right_subtree_exists(self, left);
             } else {
                 return node;
@@ -288,39 +288,50 @@ pub fn RedBlackTree(comptime T: type) type {
             // Note: Either we end up deleting the node itself (leaf), or we end up deleting the successor (leaf or only one child)
 
             if (node.data == data) {
-                if (node.children[Direction.left]) |left| {
-                    if (node.children[Direction.right]) |right| {
+                if (node.children[@intFromEnum(Direction.left)]) |left| {
+                    if (node.children[@intFromEnum(Direction.right)]) |right| {
                         // 2 children
                         var successor = get_successor_when_right_subtree_exists(right);
                         const temp = node.data;
                         node.data = successor.?.data; // put node data inside successor, keep going down the tree
                         successor.?.data = temp;
-                        node.children[Direction.right] = do_delete(self, data, node.children[Direction.right]);
-                        var fixed = fix_double_black(self, node, node.children[Direction.left]);
-                        if (!fixed.modified) {
-                            return fix_double_black(self, node, right);
+                        node.children[@intFromEnum(Direction.right)] = try do_delete(self, data, node.children[@intFromEnum(Direction.right)]);
+                        var res = try fix_double_black(self, node, node.children[@intFromEnum(Direction.left)]);
+                        if (!res.modified) {
+                            res = try fix_double_black(self, node, right);
                         }
+                        res.node.height = height(res.node.children[@intFromEnum(Direction.left)], res.node.children[@intFromEnum(Direction.right)]);
+                        return res.node;
                     } else {
-                        // 1 left child - the replacement, v, is node.children[Direction.left]
-                        delete_recolor(node, left); // TODO: free memory?
+                        // u has one left child - the replacement, v, is u's left child
+                        delete_recolor(node, left); // TODO: free memory used by u?
                         return left;
                     }
-                } else if (node.children[Direction.right]) |right| {
-                    // 1 right child - the replacement, v, is node.children[Direction.right]
-                    delete_recolor(node, right); // TODO: free memory?
+                } else if (node.children[@intFromEnum(Direction.right)]) |right| {
+                    // u has one right child - the replacement, v, is u's right child
+                    delete_recolor(node, right); // TODO: free memory used by u?
                     return right;
                 } else {
-                    // 0 children - return a sentinel as v
-                    return null;
+                    return null; // 0 children - return a sentinel as v
                 }
             } else if (data > node.data) { // recurse otherwise if node.data != data
-                node.children[Direction.right] = do_delete(self, data, node.children[Direction.right]);
-                var new_node = fix_double_black(self, node, node.children[Direction.left]);
-                return fix_double_black(self, node, node.children[Direction.right]);
+                node.children[@intFromEnum(Direction.right)] = do_delete(self, data, node.children[@intFromEnum(Direction.right)]);
+                // Fix double blacks on the way back up
+                var res = fix_double_black(self, Direction.left);
+                if (!res.modified) {
+                    res = try fix_double_black(self, Direction.right);
+                }
+                res.node.height = height(res.node.children[@intFromEnum(Direction.left)], res.node.children[@intFromEnum(Direction.right)]);
+                return res.node;
             } else {
-                node.children[Direction.left] = do_delete(self, data, node.children[Direction.left]);
-                var new_node = fix_double_black(self, node, node.children[Direction.left]);
-                return fix_double_black(self, node, node.children[Direction.right]);
+                node.children[@intFromEnum(Direction.left)] = do_delete(self, data, node.children[@intFromEnum(Direction.left)]);
+                // Fix double blacks on the way back up
+                var res = fix_double_black(self, Direction.left);
+                if (!res.modified) {
+                    res = try fix_double_black(self, Direction.right);
+                }
+                res.node.height = height(res.node.children[@intFromEnum(Direction.left)], res.node.children[@intFromEnum(Direction.right)]);
+                return res.node;
             }
         }
 
@@ -354,73 +365,110 @@ pub fn RedBlackTree(comptime T: type) type {
         // - V becomes DOUBLE BLACK when it replaces U
         // - let P = the parent of V
         // - let S = the sibling of V
-        fn fix_double_black(self: *Self, node: *Node, child: ?*Node) ?*Node {
-            // - 3a: V's sibling, S, is red -> rotate P to bring up S, recolor S and P. Continue to cases 3b, 3c, 3d
-            //    Before:               After:            After2:
-            //        P(B)               S(R)              S(B!)
-            //      /     \             /   \             /   \
-            //     V(DB)  S(R)        P(B)  SR          P(R!)  SR
-            //           /   \       /    \            /    \
-            //          SL   SR     V(DB)  SL        V(DB)   SL
+        fn fix_double_black(p: *Node, dir_child: Direction) !struct { modified: bool, node: *Node } {
+            const child = p.children[@intFromEnum(dir_child)];
+            if (child) |v| {
+                var s = get_sibling(v);
 
-            if (child) |v| {} else {
-
-                // rotate to bring S up
-
-                // continue fix_double_black
-
-                return node;
+                if (v.color == Color.double_black) {
+                    // - 3a: V's sibling, S, is red -> rotate P to bring up S, recolor S and P.
+                    // Continue to cases 3b, 3c, 3d
+                    //
+                    //    Before:               After:            After2:
+                    //        P(B)               S(R)              S(B!)
+                    //      /     \             /   \             /   \
+                    //     V(DB)  S(R)        P(B)  SR          P(R!)  SR
+                    //           /   \       /    \            /    \
+                    //          SL   SR     V(DB)  SL        V(DB)   SL
+                    // ---
+                    // 1) rotate in direction of v to bring S up
+                    std.debug.print("{s} ", .{"Fix double black: Case 3a"});
+                    s = try rotate(p, dir_child);
+                    // 2) recolor S and P
+                    s.color = Color.black;
+                    p.color = Color.red;
+                    // 3) continue on to one of cases 3b, 3c, 3d
+                    const res = try fix_double_black(p, dir_child);
+                    s.children[@intFromEnum(dir_child)] = res.node;
+                    return .{ .modified = true, .node = s };
+                } else if (!red(s) and !red(s.children[@intFromEnum(Direction.left)]) and !red(s.children[@intFromEnum(Direction.right)])) {
+                    // - 3b: V's sibling, S, is black and has two black children
+                    //    - recolor S red
+                    //    - if P is red -> make P black (absorbs V's blackness) -> DONE
+                    //    - if P is black -> now P is double black - reiterate up the tree (Call cases 3a-d on P)
+                    //    - or in the case of pointer reinforcement, simply return the parent node as a double black
+                    //
+                    //    Before:              If P was Red:          If P was Black:
+                    //        P(B)                P(B!)                    P(DB!)
+                    //      /     \              /     \                   /   \
+                    //     V(DB)  S(B)         V(B!)  S(R!)             V(B!)  S(R!)
+                    //           /   \                /   \                    /   \
+                    //        SL(B)   SR(B)        SL(B) SR(B)              SL(B) SR(B)
+                    // ---
+                    std.debug.print("{s} ", .{"Fix double black: Case 3b"});
+                    // 1) recolor S red
+                    s.color = Color.red;
+                    v.color = Color.black;
+                    if (red(p)) {
+                        p.color == Color.black;
+                    } else {
+                        p.color == Color.double_black;
+                    }
+                    return .{ .modified = true, .node = p };
+                } else if (!red(s) and red(s.children[~@intFromEnum(dir_child)])) {
+                    // - 3c: S is black, S's child further away from V is RED, other child (closer to V) is any color
+                    //    - rotate P to bring S up
+                    //    - swap colors of S and P, make S's RED child BLACK -> DONE
+                    //
+                    //       Before:                 After:            After2:
+                    //        P(X)                   S(B)              S(X!)
+                    //       /    \                 /   \             /   \
+                    //     V(DB)  S(B)            P(X)   SR(R)      P(B!)  SR(B!)
+                    //           /   \           /    \            /    \
+                    //          SL   SR(R)    V(DB)    SL        V(B!)    SL
+                    // ---
+                    std.debug.print("{s} ", .{"Fix double black: Case 3c"});
+                    // 1) Rotate to bring S up
+                    s = try rotate(p, dir_child);
+                    // 2) recolor S and P
+                    const temp_color = p.color;
+                    p.color = s.color;
+                    s.color = temp_color;
+                    v.color = Color.black;
+                    s.children[~@intFromEnum(dir_child)].?.color = Color.black;
+                    return .{ .modified = true, .node = s };
+                } else if (!red(s) and red(s.children[@intFromEnum(dir_child)]) and !red(s.children[~@intFromEnum(dir_child)])) {
+                    // - 3d: S is black, S's child further away from V is BLACK, other child (closer to V) is RED
+                    //    - rotate S to bring up S's RED child
+                    //    - swap color of S and S's original RED child
+                    //    - proceed to case 3c
+                    //
+                    //       Before:                After:            After2:
+                    //        P(X)                   P(X)              P(X)
+                    //       /    \                 /   \             /   \
+                    //     V(DB)  S(B)           V(DB)   SL(R)      V(DB)  SL(B!)
+                    //           /   \                     \                \
+                    //       SL(R)   SR(B)                  S(B)            S(R!)
+                    //                                       \                \
+                    //                                       SR(B)           SR(B)
+                    // ---
+                    std.debug.print("{s} ", .{"Fix double black: Case 3d"});
+                    // 1) Rotate to bring S: up
+                    var sl = try rotate(s, @enumFromInt(~@intFromEnum(dir_child)));
+                    // 2) recolor SL and S
+                    sl.color = Color.black;
+                    s.color = Color.red;
+                    p.children[~@intFromEnum(dir_child)] = sl;
+                    return try fix_double_black(p, dir_child);
+                } else {
+                    std.debug.print("{s} ", .{"Fix double black: Unrecognized case"});
+                    return .{ .modified = false, .node = p };
+                }
             }
         }
 
-        // - 3b: V's sibling, S, is black and has two black children
-        //    - recolor S red
-        //    - if P is red -> make P black (absorbs V's blackness) -> DONE
-        //    - if P is black -> now P is double black - reiterate up the tree (Call cases 3a-d on P)
-        //    - or in the case of pointer reinforcement, simply return the parent node as a double black
-        // - 3c: S is black, S's child further away from V is RED, other child (closer to V) is any color
-        //    - rotate P to bring S up
-        //    - swap colors of S and P, make S's RED child BLACK -> DONE
-        // - 3d: S is black, S's child further away from V is BLACK, other child (closer to V) is RED
-        //    - rotate S to bring up S's RED child
-        //    - swap color of S and S's original RED child
-        //    - proceed to case 3c
-        //
-        // So how can you do pointer reinforcement with this method??
-        // 1) if have to replace data with data in successor - swap data, but keep recursing until you reach the value to delete (will be in successor) then call DELETE
-        // 2) DELETE_FIX_UP should be called on the parent -> this allows us to return the same link for cases 3b, 3c, 3d
-        // - (eg. parent checks if child is double black)
-        // - But Case 3a causes problems -> we move the problem DOWN THE TREE instead of UP THE TREE, which means we can't get out of recursive call just yet
-        //   - we have to recurse down the tree again, calling delete_fix_up on P again
-        //
-        // pseudocode
-        //
-        // fn delete(node) -> node {
-        //     if node.value == value {
-        //        step 2 - recolor;
-        //        return node;
-        //     } else if value > node.value {
-        //        node.children[Direction.right] = delete(node.children[Direction.right])
-        //        return fix_double_black(node, right)
-        //     }
-        //     else {
-        //        node.children[Direction.left]_child = delete(node.children[Direction.left])
-        //        return fix_double_black(node, left)
-        //     }
-        //
-        //  }
-        //
-        //  fn fix double_black(node (P), dir) -> node {
-        //     if node.dir_child (V) has double black {
-        //         case 3b: 3b recolor, return node
-        //         case 3c: 3c rotate, recolor, return S in place of P
-        //         case 3d: 3d rotate and recolor, return SL in place of P
-        //         case 3a: 3a rotate and recolor, node.dir_child = fix_double_black(node.dir_child), return node
-        //     }
-        // }
-
         pub fn level_order_transversal(self: *Self) ![]u8 {
-            // std.debug.print("{s} ", .{" || "});
+            //std.debug.print("{s} ", .{" || "});
 
             var str: []u8 = "";
 
@@ -445,11 +493,11 @@ pub fn RedBlackTree(comptime T: type) type {
 
                     str = try std.fmt.allocPrint(self.allocator, "{s}{}{s}{},", .{ str, rbn.data, color, rbn.height });
 
-                    // std.debug.print("{}{s}{} ", .{ rbn.data, color, rbn.height });
-                    if (rbn.children[Direction.left]) |left| {
+                    //std.debug.print("{}{s}{} ", .{ rbn.data, color, rbn.height });
+                    if (rbn.children[@intFromEnum(Direction.left)]) |left| {
                         try q.push(left);
                     }
-                    if (rbn.children[Direction.right]) |right| {
+                    if (rbn.children[@intFromEnum(Direction.right)]) |right| {
                         try q.push(right);
                     }
                 }
