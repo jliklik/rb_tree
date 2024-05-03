@@ -490,6 +490,14 @@ pub fn RedBlackTree(comptime T: type) type {
                             } else {
                                 p.color = Color.double_black;
                             }
+                            if (v.delete_later) {
+                                std.debug.print("{s}", .{"\nRemoving the placeholder sentinel"});
+                                p.children[@intFromEnum(dir_child)] = null;
+                                p.height = height(p.children[@intFromEnum(Direction.left)], p.children[@intFromEnum(Direction.right)]);
+                                print_node(p);
+                                // TODO: free memory
+                            }
+
                             return .{ .modified = true, .node = p };
                         } else if (!red(s) and red(s.children[~@intFromEnum(dir_child)])) {
                             // - 3c: S is black, S's child further away from V is RED, other child (closer to V) is any color
@@ -730,4 +738,36 @@ test "delete - double black - case 3c" {
     res = try rbtree.level_order_transversal();
     std.debug.print("{s}{s}", .{ "\n", res });
     std.debug.assert(std.mem.eql(u8, "3B3,1R1,8R2,0B0,2B0,7B1,15B0,6R0,", res));
+}
+
+test "delete - double black - case 3a" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var rbtree = RedBlackTree(u32).new(allocator);
+    try rbtree.insert(5);
+    try rbtree.insert(2);
+    try rbtree.insert(8);
+    try rbtree.insert(1);
+    try rbtree.insert(3);
+    try rbtree.insert(7);
+    try rbtree.insert(15);
+    try rbtree.insert(0);
+    try rbtree.insert(6);
+    var res = try rbtree.level_order_transversal();
+    std.debug.print("{s}{s}", .{ "\n", res });
+    std.debug.assert(std.mem.eql(u8, "5B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,6R0,", res));
+    try rbtree.delete(8);
+    res = try rbtree.level_order_transversal();
+    std.debug.print("{s}{s}", .{ "\n", res });
+    std.debug.assert(std.mem.eql(u8, "5B3,2R2,7R1,1B1,3B0,6B0,15B0,0R0,", res));
+    try rbtree.delete(7); // case 3b
+    res = try rbtree.level_order_transversal();
+    std.debug.print("{s}{s}", .{ "\n", res });
+    std.debug.assert(std.mem.eql(u8, "5B3,2R2,6B1,1B1,3B0,15R0,0R0,", res));
+    // try rbtree.delete(15);
+    // try rbtree.delete(6); // case 3a into 3b
+    // res = try rbtree.level_order_transversal();
+    // std.debug.print("{s}{s}", .{ "\n", res });
+    // std.debug.assert(std.mem.eql(u8, "3B3,1R1,8R2,0B0,2B0,7B1,15B0,6R0,", res));
 }
