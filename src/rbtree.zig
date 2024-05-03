@@ -672,6 +672,8 @@ test "red black tree insert 3" {
     std.debug.assert(std.mem.eql(u8, "5B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,6R0,", res));
 }
 
+// The following RB tree visualizer was used to help develop these test cases
+// https://www.cs.usfca.edu/~galles/visualization/RedBlack.html
 test "delete leaf" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -765,9 +767,9 @@ test "delete - double black - case 3a" {
     res = try rbtree.level_order_transversal();
     std.debug.print("{s}{s}", .{ "\n", res });
     std.debug.assert(std.mem.eql(u8, "5B3,2R2,6B1,1B1,3B0,15R0,0R0,", res));
-    // try rbtree.delete(15);
-    // try rbtree.delete(6); // case 3a into 3b
-    // res = try rbtree.level_order_transversal();
-    // std.debug.print("{s}{s}", .{ "\n", res });
-    // std.debug.assert(std.mem.eql(u8, "3B3,1R1,8R2,0B0,2B0,7B1,15B0,6R0,", res));
+    try rbtree.delete(15);
+    try rbtree.delete(6); // case 3a into 3b
+    res = try rbtree.level_order_transversal();
+    std.debug.print("{s}{s}", .{ "\n", res });
+    std.debug.assert(std.mem.eql(u8, "2B2,1B1,5B1,0R0,3R0,", res));
 }
