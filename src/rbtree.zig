@@ -17,6 +17,7 @@ pub fn RedBlackTree(comptime T: type) type {
             color: Color = Color.black,
             frequency: u32 = 1,
             height: u32 = 0,
+            delete_later: bool = false,
 
             pub fn set_left(self: *Node, left_node: *Node) void {
                 self.children[@intFromEnum(Direction.left)] = left_node;
@@ -56,6 +57,30 @@ pub fn RedBlackTree(comptime T: type) type {
                 return r.height + 1;
             } else {
                 return 0; // both left and right are null
+            }
+        }
+
+        fn node_color_to_string(rbn: *Node) *const [1:0]u8 {
+            if (rbn.color == Color.red) {
+                return "R";
+            }
+            return "B";
+        }
+
+        fn print_node(node: *Node) void {
+            std.debug.print("{s}", .{"\n"});
+            std.debug.print("{}{s}{}", .{ node.data, node_color_to_string(node), node.height });
+            std.debug.print("{s}", .{" L:"});
+            if (node.children[@intFromEnum(Direction.left)]) |left| {
+                std.debug.print("{}{s}{}", .{ left.data, node_color_to_string(left), left.height });
+            } else {
+                std.debug.print("{s}", .{"null"});
+            }
+            std.debug.print("{s}", .{" R:"});
+            if (node.children[@intFromEnum(Direction.right)]) |right| {
+                std.debug.print("{}{s}{}", .{ right.data, node_color_to_string(right), right.height });
+            } else {
+                std.debug.print("{s}", .{"null"});
             }
         }
 
@@ -189,7 +214,7 @@ pub fn RedBlackTree(comptime T: type) type {
                             u.color = Color.black;
                         }
                         self.color = Color.red;
-                        std.debug.print("{s} ", .{"Case 1"});
+                        // std.debug.print("{s} ", .{"Case 1"});
                         return .{ .modified = true, .node = self };
                     } else if (red(gc) and red(c) and !red(uncle)) {
                         if (dir_child != dir_grandchild) {
@@ -222,7 +247,7 @@ pub fn RedBlackTree(comptime T: type) type {
                             const node_to_return = try rotate(self, dir_grandchild); // self is GP
                             gc.color = Color.black;
                             self.color = Color.red;
-                            std.debug.print("{s} ", .{"Case 2-1/2-2"});
+                            // std.debug.print("{s} ", .{"Case 2-1/2-2"});
                             return .{ .modified = true, .node = node_to_return };
                         } else {
                             // Single rotation
@@ -241,7 +266,7 @@ pub fn RedBlackTree(comptime T: type) type {
                             const node_to_return = try rotate(self, flip_dir(dir_child));
                             c.color = Color.black;
                             self.color = Color.red;
-                            std.debug.print("{s} ", .{"Case 3-1/3-2"});
+                            // std.debug.print("{s} ", .{"Case 3-1/3-2"});
                             return .{ .modified = true, .node = node_to_return };
                         }
                     }
@@ -271,7 +296,25 @@ pub fn RedBlackTree(comptime T: type) type {
             }
         }
 
+        /// Find predecessor node (assumes left subtree is NOT nil)
+        /// First go right, then go all the way to the left
+        fn get_predecessor_when_left_subtree_exists(self: *Self, node: *Node) ?*Node {
+            if (node.children[@intFromEnum(Direction.left)]) |left| {
+                return do_get_predecessor_when_left_subtree_exists(self, left);
+            }
+            return null;
+        }
+
+        fn do_get_predecessor_when_left_subtree_exists(self: *Self, node: *Node) ?*Node {
+            if (node.children[@intFromEnum(Direction.right)]) |right| {
+                return do_get_predecessor_when_left_subtree_exists(self, right);
+            } else {
+                return node;
+            }
+        }
+
         pub fn delete(self: *Self, data: T) !void {
+            std.debug.print("{s}{} ", .{ "\n--- Data to delete: ", data });
             self.root = try do_delete(self, data, self.root);
         }
 
@@ -279,6 +322,7 @@ pub fn RedBlackTree(comptime T: type) type {
         /// http://mainline.brynmawr.edu/Courses/cs246/spring2016/lectures/16_RedBlackTrees.pdf
         pub fn do_delete(self: *Self, data: T, node: ?*Node) !?*Node {
             if (node) |n| {
+                print_node(n);
                 // DELETE Step 1: Do normal BST deletion
                 // - may have to find successor and replace the node's value with the successor's value
                 // - then delete the successor node
@@ -286,18 +330,25 @@ pub fn RedBlackTree(comptime T: type) type {
 
                 if (n.data == data) {
                     if (n.children[@intFromEnum(Direction.left)]) |left| {
-                        if (n.children[@intFromEnum(Direction.right)]) |right| {
+                        if (n.children[@intFromEnum(Direction.right)] != null) {
                             // 2 children
-                            var successor = get_successor_when_right_subtree_exists(self, right);
+                            var predecessor = get_predecessor_when_left_subtree_exists(self, n);
+                            std.debug.print("{s} ", .{"\nFound predecessor:"});
+                            if (predecessor) |sc| {
+                                print_node(sc);
+                            } else {
+                                std.debug.print("{s} ", .{"\nFailed to find predecessor:"});
+                            }
                             const temp = n.data;
-                            n.data = successor.?.data; // put node data inside successor, keep going down the tree
-                            successor.?.data = temp;
-                            n.children[@intFromEnum(Direction.right)] = try do_delete(self, data, right);
+                            n.data = predecessor.?.data; // put node data inside successor, keep going down the tree
+                            predecessor.?.data = temp;
+                            n.children[@intFromEnum(Direction.left)] = try do_delete(self, data, left);
                             var res = try fix_double_black(n, Direction.left);
                             if (!res.modified) {
                                 res = try fix_double_black(n, Direction.right);
                             }
                             res.node.height = height(res.node.children[@intFromEnum(Direction.left)], res.node.children[@intFromEnum(Direction.right)]);
+                            print_node(res.node);
                             return res.node;
                         } else {
                             // u has one left child - the replacement, v, is u's left child
@@ -309,7 +360,17 @@ pub fn RedBlackTree(comptime T: type) type {
                         delete_recolor(n, right); // TODO: free memory used by u?
                         return right;
                     } else {
-                        return null; // 0 children - return a sentinel as v
+                        std.debug.print("{s}{} ", .{ "\nFound data to delete: ", data });
+                        // TODO: free memory used by u?
+                        // TODO: A null node can be double black
+                        if (red(n)) {
+                            return null; // 0 children - return a sentinel as v
+                        } else {
+                            delete_recolor(n, null);
+                            return n;
+                        }
+                        // set delete flag
+                        // in fix_double_black we will delete it there
                     }
                 } else if (data > n.data) { // recurse otherwise if node.data != data
                     n.children[@intFromEnum(Direction.right)] = try do_delete(self, data, n.children[@intFromEnum(Direction.right)]);
@@ -319,6 +380,7 @@ pub fn RedBlackTree(comptime T: type) type {
                         res = try fix_double_black(n, Direction.right);
                     }
                     res.node.height = height(res.node.children[@intFromEnum(Direction.left)], res.node.children[@intFromEnum(Direction.right)]);
+                    print_node(res.node);
                     return res.node;
                 } else {
                     n.children[@intFromEnum(Direction.left)] = try do_delete(self, data, n.children[@intFromEnum(Direction.left)]);
@@ -328,6 +390,7 @@ pub fn RedBlackTree(comptime T: type) type {
                         res = try fix_double_black(n, Direction.right);
                     }
                     res.node.height = height(res.node.children[@intFromEnum(Direction.left)], res.node.children[@intFromEnum(Direction.right)]);
+                    print_node(res.node);
                     return res.node;
                 }
             } else {
@@ -354,11 +417,18 @@ pub fn RedBlackTree(comptime T: type) type {
         //      \
         //       V(R)
         // - 2c: if u is black and v is black - we get a DOUBLE BLACK - proceed to step 3
-        fn delete_recolor(u: *Node, v: *Node) void {
-            if ((u.color == Color.black) and (v.color == Color.red)) {
-                v.color = Color.black;
-            } else if ((u.color == Color.black) and (v.color == Color.black)) {
-                v.color = Color.double_black;
+        fn delete_recolor(u: *Node, v_or_null: ?*Node) void {
+            if (v_or_null) |v| {
+                if ((u.color == Color.black) and (v.color == Color.red)) {
+                    v.color = Color.black;
+                } else if ((u.color == Color.black) and (v.color == Color.black)) {
+                    v.color = Color.double_black;
+                }
+            } else {
+                // as if the NIL node took u's place and became double black
+                std.debug.print("{s}", .{"\nRecoloring a nil to double black"});
+                u.color = Color.double_black;
+                u.delete_later = true;
             }
         }
 
@@ -369,6 +439,10 @@ pub fn RedBlackTree(comptime T: type) type {
         fn fix_double_black(p: *Node, dir_child: Direction) !struct { modified: bool, node: *Node } {
             const child = p.children[@intFromEnum(dir_child)];
             if (child) |v| {
+                std.debug.print("{s}", .{"\nFixing double black: v"});
+                print_node(v);
+                std.debug.print("{s}", .{"\nFixing double black: p"});
+                print_node(p);
                 const sibling = get_sibling(p, v);
                 if (sibling) |s| {
                     if (v.color == Color.double_black) {
@@ -384,12 +458,12 @@ pub fn RedBlackTree(comptime T: type) type {
                             //          SL   SR     V(DB)  SL        V(DB)   SL
                             // ---
                             // 1) rotate in direction of v to bring S up
-                            std.debug.print("{s} ", .{"Fix double black: Case 3a"});
+                            std.debug.print("{s} ", .{"\nFix double black: Case 3a"});
                             var rs = try rotate(p, dir_child);
                             // 2) recolor S and P
                             rs.color = Color.black;
                             p.color = Color.red;
-                            // 3) continue on to one of cases 3b, 3c, 3d
+                            // 3) pushed problem down - continue on to one of cases 3b, 3c, 3d
                             const res = try fix_double_black(p, dir_child);
                             rs.children[@intFromEnum(dir_child)] = res.node;
                             return .{ .modified = true, .node = rs };
@@ -407,7 +481,7 @@ pub fn RedBlackTree(comptime T: type) type {
                             //           /   \                /   \                    /   \
                             //        SL(B)   SR(B)        SL(B) SR(B)              SL(B) SR(B)
                             // ---
-                            std.debug.print("{s} ", .{"Fix double black: Case 3b"});
+                            std.debug.print("{s} ", .{"\nFix double black: Case 3b"});
                             // 1) recolor S red
                             s.color = Color.red;
                             v.color = Color.black;
@@ -429,7 +503,7 @@ pub fn RedBlackTree(comptime T: type) type {
                             //           /   \           /    \            /    \
                             //          SL   SR(R)    V(DB)    SL        V(B!)    SL
                             // ---
-                            std.debug.print("{s} ", .{"Fix double black: Case 3c"});
+                            std.debug.print("{s} ", .{"\nFix double black: Case 3c"});
                             // 1) Rotate to bring S up
                             var rs = try rotate(p, dir_child);
                             // 2) recolor S and P
@@ -438,6 +512,14 @@ pub fn RedBlackTree(comptime T: type) type {
                             rs.color = temp_color;
                             v.color = Color.black;
                             rs.children[~@intFromEnum(dir_child)].?.color = Color.black;
+                            if (v.delete_later) {
+                                std.debug.print("{s}", .{"\nRemoving the placeholder sentinel"});
+                                p.children[@intFromEnum(dir_child)] = null;
+                                p.height = height(p.children[@intFromEnum(Direction.left)], p.children[@intFromEnum(Direction.right)]);
+                                print_node(p);
+                                // TODO: free memory
+                            }
+
                             return .{ .modified = true, .node = rs };
                         } else if (!red(s) and red(s.children[@intFromEnum(dir_child)]) and !red(s.children[~@intFromEnum(dir_child)])) {
                             // - 3d: S is black, S's child further away from V is BLACK, other child (closer to V) is RED
@@ -454,19 +536,20 @@ pub fn RedBlackTree(comptime T: type) type {
                             //                                       \                \
                             //                                       SR(B)           SR(B)
                             // ---
-                            std.debug.print("{s} ", .{"Fix double black: Case 3d"});
+                            std.debug.print("{s} ", .{"\nFix double black: Case 3d"});
                             // 1) Rotate to bring S: up
                             var sl = try rotate(s, @enumFromInt(~@intFromEnum(dir_child)));
                             // 2) recolor SL and S
                             sl.color = Color.black;
                             s.color = Color.red;
                             p.children[~@intFromEnum(dir_child)] = sl;
+                            // 3) proceed to case 3c
                             return try fix_double_black(p, dir_child);
                         } else {
-                            std.debug.print("{s} ", .{"Fix double black: Unrecognized case - A"});
+                            std.debug.print("{s} ", .{"\nFix double black: Unrecognized case - A"});
                             return .{ .modified = false, .node = p };
                         }
-                        std.debug.print("{s} ", .{"Fix double black: Unrecognized case - B"});
+                        std.debug.print("{s} ", .{"\nFix double black: Unrecognized case - B"});
                         return .{ .modified = false, .node = p };
                     }
 
@@ -474,7 +557,7 @@ pub fn RedBlackTree(comptime T: type) type {
                     return .{ .modified = false, .node = p };
                 }
 
-                std.debug.print("{s} ", .{"Fix double black: V has no sibling"});
+                std.debug.print("{s} ", .{"\nFix double black: V has no sibling"});
                 return .{ .modified = false, .node = p };
             }
 
@@ -501,12 +584,7 @@ pub fn RedBlackTree(comptime T: type) type {
             while (!q.is_empty()) {
                 const rbtree_node = q.pop();
                 if (rbtree_node) |rbn| {
-                    var color = "B";
-                    if (rbn.color == Color.red) {
-                        color = "R";
-                    }
-
-                    str = try std.fmt.allocPrint(self.allocator, "{s}{}{s}{},", .{ str, rbn.data, color, rbn.height });
+                    str = try std.fmt.allocPrint(self.allocator, "{s}{}{s}{},", .{ str, rbn.data, node_color_to_string(rbn), rbn.height });
 
                     //std.debug.print("{}{s}{} ", .{ rbn.data, color, rbn.height });
                     if (rbn.children[@intFromEnum(Direction.left)]) |left| {
@@ -586,7 +664,7 @@ test "red black tree insert 3" {
     std.debug.assert(std.mem.eql(u8, "5B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,6R0,", res));
 }
 
-test "red black tree deletion 1" {
+test "delete leaf" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -599,11 +677,57 @@ test "red black tree deletion 1" {
     try rbtree.insert(0);
     try rbtree.insert(3);
     try rbtree.insert(7);
-    var res = try rbtree.level_order_transversal();
-    std.debug.assert(std.mem.eql(u8, "8B3,2R2,15B0,1B1,5B1,0R0,3R0,7R0,", res));
     try rbtree.insert(6);
-    res = try rbtree.level_order_transversal();
+    var res = try rbtree.level_order_transversal();
     std.debug.assert(std.mem.eql(u8, "5B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,6R0,", res));
     try rbtree.delete(6);
-    std.debug.assert(std.mem.eql(u8, "5B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,", res));
+    res = try rbtree.level_order_transversal();
+    std.debug.print("{s}{s}", .{ "\n", res });
+    std.debug.assert(std.mem.eql(u8, "5B3,2R2,8R1,1B1,3B0,7B0,15B0,0R0,", res));
+}
+
+test "delete recolor case 1, no double black fixing required" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var rbtree = RedBlackTree(u32).new(allocator);
+    try rbtree.insert(5);
+    try rbtree.insert(2);
+    try rbtree.insert(8);
+    try rbtree.insert(1);
+    try rbtree.insert(3);
+    try rbtree.insert(7);
+    try rbtree.insert(15);
+    try rbtree.insert(0);
+    try rbtree.insert(4);
+    try rbtree.insert(6);
+    var res = try rbtree.level_order_transversal();
+    std.debug.assert(std.mem.eql(u8, "5B3,2R2,8R2,1B1,3B1,7B1,15B0,0R0,4R0,6R0,", res));
+    try rbtree.delete(5);
+    res = try rbtree.level_order_transversal();
+    std.debug.print("{s}{s}", .{ "\n", res });
+    std.debug.assert(std.mem.eql(u8, "4B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,6R0,", res));
+}
+
+test "delete - double black - case 3c" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var rbtree = RedBlackTree(u32).new(allocator);
+    try rbtree.insert(5);
+    try rbtree.insert(2);
+    try rbtree.insert(8);
+    try rbtree.insert(1);
+    try rbtree.insert(3);
+    try rbtree.insert(7);
+    try rbtree.insert(15);
+    try rbtree.insert(0);
+    try rbtree.insert(6);
+    var res = try rbtree.level_order_transversal();
+    std.debug.print("{s}{s}", .{ "\n", res });
+    std.debug.assert(std.mem.eql(u8, "5B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,6R0,", res));
+    try rbtree.delete(5);
+    res = try rbtree.level_order_transversal();
+    std.debug.print("{s}{s}", .{ "\n", res });
+    std.debug.assert(std.mem.eql(u8, "3B3,1R1,8R2,0B0,2B0,7B1,15B0,6R0,", res));
 }
