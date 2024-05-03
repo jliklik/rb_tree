@@ -790,3 +790,32 @@ test "delete double-black case 3d" {
     res = try rbtree.level_order_transversal();
     std.debug.assert(std.mem.eql(u8, "13B1,12B0,14B0,", res));
 }
+
+test "fire away" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var rbtree = RedBlackTree(u32).new(allocator);
+    try rbtree.insert(1562);
+    try rbtree.insert(3848);
+    try rbtree.insert(58);
+    try rbtree.insert(289);
+    try rbtree.insert(214);
+    try rbtree.insert(5889);
+    try rbtree.insert(4844);
+    try rbtree.insert(5249);
+    try rbtree.delete(4844);
+    var res = try rbtree.level_order_transversal();
+    std.debug.print("{s}{s}", .{ "\n", res });
+    std.debug.assert(std.mem.eql(u8, "1562B2,214B1,5249R1,58R0,289R0,3848B0,5889B0,", res));
+    try rbtree.insert(2551);
+    try rbtree.delete(5889);
+    res = try rbtree.level_order_transversal();
+    std.debug.assert(std.mem.eql(u8, "1562B2,214B1,3848R1,58R0,289R0,2551B0,5249B0,", res));
+    try rbtree.delete(289);
+    try rbtree.delete(1562);
+    try rbtree.delete(214);
+    res = try rbtree.level_order_transversal();
+    std.debug.assert(std.mem.eql(u8, "3848B2,58B1,5249B0,2551R0,", res));
+    try rbtree.delete(289);
+}
