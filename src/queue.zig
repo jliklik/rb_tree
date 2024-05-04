@@ -40,12 +40,15 @@ pub fn Queue(comptime T: type) type {
 
         pub fn pop(self: *Self) ?T {
             if (self.head) |head| {
+                const data = head.data;
                 self.head = head.next;
+                self.allocator.destroy(head);
                 // last item popped
                 if (self.head == null) {
                     self.tail = null;
                 }
-                return head.data;
+
+                return data;
             } else {
                 return null;
             }
