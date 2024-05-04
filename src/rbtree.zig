@@ -36,7 +36,7 @@ pub fn RedBlackTree(comptime T: type) type {
             return .{ .black_height = 0, .root = null, .allocator = allocator };
         }
 
-        pub fn flip_dir(dir: Direction) Direction {
+        fn flip_dir(dir: Direction) Direction {
             if (dir == Direction.left) {
                 return Direction.right;
             }
@@ -90,6 +90,24 @@ pub fn RedBlackTree(comptime T: type) type {
             const node = try self.allocator.create(Node);
             node.* = .{ .data = data, .children = [_]?*Node{ null, null }, .color = Color.red, .frequency = 1, .height = 0 };
             return node;
+        }
+
+        pub fn get_data(self: *Self, data: T) ?*Node {
+            return do_get_data(self, data, self.root);
+        }
+
+        fn do_get_data(self: *Self, data: T, node: ?*Node) ?*Node {
+            if (node) |n| {
+                if (n.data == data) {
+                    return n;
+                } else if (n.data > data) {
+                    return do_get_data(self, data, n.children[@intFromEnum(Direction.right)]);
+                } else {
+                    return do_get_data(self, data, n.children[@intFromEnum(Direction.left)]);
+                }
+            } else {
+                return null;
+            }
         }
 
         pub fn insert(self: *Self, data: T) !void {
@@ -320,7 +338,7 @@ pub fn RedBlackTree(comptime T: type) type {
 
         /// Double black case
         /// http://mainline.brynmawr.edu/Courses/cs246/spring2016/lectures/16_RedBlackTrees.pdf
-        pub fn do_delete(self: *Self, data: T, node: ?*Node) !?*Node {
+        fn do_delete(self: *Self, data: T, node: ?*Node) !?*Node {
             if (node) |n| {
                 print_node(n);
                 // DELETE Step 1: Do normal BST deletion
@@ -329,52 +347,57 @@ pub fn RedBlackTree(comptime T: type) type {
                 // Note: Either we end up deleting the node itself (leaf), or we end up deleting the successor (leaf or only one child)
 
                 if (n.data == data) {
-                    if (n.children[@intFromEnum(Direction.left)]) |left| {
-                        if (n.children[@intFromEnum(Direction.right)] != null) {
-                            // 2 children
-                            var predecessor = get_predecessor_when_left_subtree_exists(self, n);
-                            std.debug.print("{s} ", .{"\nFound predecessor:"});
-                            if (predecessor) |sc| {
-                                print_node(sc);
+                    if (n.frequency == 1) {
+                        if (n.children[@intFromEnum(Direction.left)]) |left| {
+                            if (n.children[@intFromEnum(Direction.right)] != null) {
+                                // 2 children
+                                var predecessor = get_predecessor_when_left_subtree_exists(self, n);
+                                std.debug.print("{s} ", .{"\nFound predecessor:"});
+                                if (predecessor) |sc| {
+                                    print_node(sc);
+                                } else {
+                                    std.debug.print("{s} ", .{"\nFailed to find predecessor:"});
+                                }
+                                const temp = n.data;
+                                n.data = predecessor.?.data; // put node data inside successor, keep going down the tree
+                                predecessor.?.data = temp;
+                                n.children[@intFromEnum(Direction.left)] = try do_delete(self, data, left);
+                                var res = try fix_double_black(self, n, Direction.left);
+                                if (!res.modified) {
+                                    res = try fix_double_black(self, n, Direction.right);
+                                }
+                                res.node.height = height(res.node.children[@intFromEnum(Direction.left)], res.node.children[@intFromEnum(Direction.right)]);
+                                print_node(res.node);
+                                return res.node;
                             } else {
-                                std.debug.print("{s} ", .{"\nFailed to find predecessor:"});
+                                // u has one left child - the replacement, v, is u's left child
+                                delete_recolor(n, left);
+                                self.allocator.destroy(n); // free memory used by u, return v
+                                return left;
                             }
-                            const temp = n.data;
-                            n.data = predecessor.?.data; // put node data inside successor, keep going down the tree
-                            predecessor.?.data = temp;
-                            n.children[@intFromEnum(Direction.left)] = try do_delete(self, data, left);
-                            var res = try fix_double_black(self, n, Direction.left);
-                            if (!res.modified) {
-                                res = try fix_double_black(self, n, Direction.right);
-                            }
-                            res.node.height = height(res.node.children[@intFromEnum(Direction.left)], res.node.children[@intFromEnum(Direction.right)]);
-                            print_node(res.node);
-                            return res.node;
-                        } else {
-                            // u has one left child - the replacement, v, is u's left child
-                            delete_recolor(n, left);
+                        } else if (n.children[@intFromEnum(Direction.right)]) |right| {
+                            // u has one right child - the replacement, v, is u's right child
+                            delete_recolor(n, right);
                             self.allocator.destroy(n); // free memory used by u, return v
-                            return left;
+                            return right;
+                        } else {
+                            // no children
+                            std.debug.print("{s}{} ", .{ "\nFound data to delete: ", data });
+                            if (red(n) or n == self.root) {
+                                self.allocator.destroy(n); // free memory used by u, return v
+                                return null; // 0 children - return a sentinel as v
+                            } else {
+                                // If the node being deleted is black and non-root - it will become a double black - defer delete until later
+                                // so we can handle the double black properly
+                                delete_recolor(n, null);
+                                return n;
+                            }
+                            // set delete flag
+                            // in fix_double_black we will delete it there
                         }
-                    } else if (n.children[@intFromEnum(Direction.right)]) |right| {
-                        // u has one right child - the replacement, v, is u's right child
-                        delete_recolor(n, right);
-                        self.allocator.destroy(n); // free memory used by u, return v
-                        return right;
                     } else {
-                        // no children
-                        std.debug.print("{s}{} ", .{ "\nFound data to delete: ", data });
-                        if (red(n)) {
-                            self.allocator.destroy(n); // free memory used by u, return v
-                            return null; // 0 children - return a sentinel as v
-                        } else {
-                            // If the node being deleted is black - it will become a double black - defer delete until later
-                            // so we can handle the double black properly
-                            delete_recolor(n, null);
-                            return n;
-                        }
-                        // set delete flag
-                        // in fix_double_black we will delete it there
+                        n.frequency = n.frequency - 1;
+                        return n;
                     }
                 } else if (data > n.data) { // recurse otherwise if node.data != data
                     n.children[@intFromEnum(Direction.right)] = try do_delete(self, data, n.children[@intFromEnum(Direction.right)]);
@@ -793,6 +816,70 @@ test "delete double-black case 3d" {
     try rbtree.delete(10);
     res = try rbtree.level_order_transversal();
     std.debug.assert(std.mem.eql(u8, "13B1,12B0,14B0,", res));
+}
+
+test "delete root" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var rbtree = RedBlackTree(u32).new(allocator);
+    try rbtree.insert(1);
+    try rbtree.insert(3);
+    try rbtree.insert(2);
+    try rbtree.delete(2);
+    try rbtree.delete(3);
+    try rbtree.delete(1);
+    const res = try rbtree.level_order_transversal();
+    std.debug.print("{s}{s}", .{ "\n", res });
+    std.debug.assert(std.mem.eql(u8, "", res));
+}
+
+test "deleting non-existent data doesn't cause any errors" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var rbtree = RedBlackTree(u32).new(allocator);
+    try rbtree.insert(1);
+    try rbtree.insert(3);
+    try rbtree.insert(2);
+    try rbtree.delete(6);
+    try rbtree.delete(3);
+    try rbtree.delete(5);
+    const res = try rbtree.level_order_transversal();
+    std.debug.print("{s}{s}", .{ "\n", res });
+    std.debug.assert(std.mem.eql(u8, "2B1,1R0,", res));
+}
+
+test "inserting and deleting multiple of same value increases frequency" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var rbtree = RedBlackTree(u32).new(allocator);
+    try rbtree.insert(2);
+    try rbtree.insert(2);
+    const nd = rbtree.get_data(2);
+    std.debug.assert(nd.?.frequency == 2);
+    try rbtree.delete(2);
+    std.debug.assert(nd.?.frequency == 1);
+    try rbtree.delete(2);
+    std.debug.assert(nd.?.frequency == 1);
+    // nd = null;
+    // std.debug.assert(nd == null);
+
+    // TODO: this is dangerous... we may end up freeing node inside rbtree but the outside world does not know
+    // I suppose this is why usually we get the user to create the node, and then pass it in to be linked into
+    // the data structure. So the structure doesn't own the memory but the calling process does
+    // We should redo the code so we DON'T allocate nodes within the red black tree
+    // Delete should return the node deleted -> then the calling process can destroy it
+    // Then the calling process can decide whether to use the heap or the stack as well...
+
+    // var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    // const allocator = arena.allocator();
+    // const byte = try allocator.create(u8);
+    // byte.* = 128;
+    // std.debug.assert(byte.* == 128);
+    // allocator.destroy(byte);
+    // std.debug.assert(byte.* == 128); // this still passes!! Zig can't detect freed memory ... :(
 }
 
 test "fire away" {
