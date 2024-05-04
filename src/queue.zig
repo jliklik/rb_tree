@@ -45,7 +45,9 @@ pub fn Queue(comptime T: type) type {
                 if (self.head == null) {
                     self.tail = null;
                 }
-                return head.data;
+                const data = head.data;
+                self.allocator.destroy(head);
+                return data;
             } else {
                 return null;
             }
