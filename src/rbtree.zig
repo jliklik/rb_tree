@@ -130,7 +130,7 @@ pub fn RedBlackTree(comptime T: type) type {
                         if (!res.modified) {
                             res = try rebalance(new_n, Direction.left, Direction.right);
                         }
-                        // std.debug.print("Returning node from left: {} ", .{res.node.data});
+                        std.debug.print("Returning node from left: {} ", .{res.node.data});
                         return res.node;
                     }
                 } else if (node_to_insert.data > n.data) {
@@ -139,11 +139,11 @@ pub fn RedBlackTree(comptime T: type) type {
                         var new_n = n;
                         new_n.height = height(n.children[@intFromEnum(Direction.left)], right);
                         var res =
-                            try rebalance(n, Direction.right, Direction.left);
+                            try rebalance(new_n, Direction.right, Direction.left);
                         if (!res.modified) {
                             res = try rebalance(new_n, Direction.right, Direction.right);
                         }
-                        // std.debug.print("Returning node from right: {} ", .{res.node.data});
+                        std.debug.print("Returning node from right: {} ", .{res.node.data});
                         return res.node;
                     }
                 } else {
@@ -211,11 +211,14 @@ pub fn RedBlackTree(comptime T: type) type {
         /// https://www.cs.purdue.edu/homes/ayg/CS251/slides/chap13b.pdf
         /// Returns struct of .{modified? (T/F), new grandparent node}
         fn rebalance(self: *Node, dir_child: Direction, dir_grandchild: Direction) !struct { modified: bool, node: *Node } {
+            std.debug.print("{s}{}", .{ " self data: ", self.data });
             const child = self.children[@intFromEnum(dir_child)];
             if (child) |c| {
+                std.debug.print("{s}{}", .{ " child data: ", c.data });
                 const grandchild = c.children[@intFromEnum(dir_grandchild)];
                 if (grandchild) |gc| {
                     const uncle = get_sibling(self, c);
+                    std.debug.print("{s}{}", .{ " gc data: ", gc.data });
                     if (red(gc) and red(uncle)) {
                         // Case 1: Both parent and uncle are red
                         //
@@ -234,7 +237,7 @@ pub fn RedBlackTree(comptime T: type) type {
                             u.color = Color.black;
                         }
                         self.color = Color.red;
-                        // std.debug.print("{s} ", .{"Case 1"});
+                        std.debug.print("{s} ", .{"Case 1"});
                         return .{ .modified = true, .node = self };
                     } else if (red(gc) and red(c) and !red(uncle)) {
                         if (dir_child != dir_grandchild) {
@@ -265,9 +268,9 @@ pub fn RedBlackTree(comptime T: type) type {
                             //
                             self.children[@intFromEnum(dir_child)] = try rotate(c, dir_child); // child is P
                             const node_to_return = try rotate(self, dir_grandchild); // self is GP
-                            gc.color = Color.black;
-                            self.color = Color.red;
-                            // std.debug.print("{s} ", .{"Case 2-1/2-2"});
+                            gc.color = Color.black; // GC is now at the top
+                            self.color = Color.red; // GP becomes red
+                            std.debug.print("{s} ", .{"Case 2-1/2-2"});
                             return .{ .modified = true, .node = node_to_return };
                         } else {
                             // Single rotation
@@ -286,7 +289,7 @@ pub fn RedBlackTree(comptime T: type) type {
                             const node_to_return = try rotate(self, flip_dir(dir_child));
                             c.color = Color.black;
                             self.color = Color.red;
-                            // std.debug.print("{s} ", .{"Case 3-1/3-2"});
+                            std.debug.print("{s} ", .{"Case 3-1/3-2"});
                             return .{ .modified = true, .node = node_to_return };
                         }
                     }
@@ -730,214 +733,253 @@ test "red black tree insert 2" {
     try rbtree.check(allocator, "12B3,8R2,15R2,5B0,9B1,13B0,19B1,10R0,23R0,");
 }
 
-// test "red black tree insert 3" {
-//     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-//     defer arena.deinit();
-//     const allocator = arena.allocator();
-//     var rbtree = RedBlackTree(u32).new(allocator);
-//     try rbtree.insert(8);
-//     try rbtree.insert(2);
-//     try rbtree.insert(15);
-//     try rbtree.insert(1);
-//     try rbtree.insert(5);
-//     try rbtree.insert(0);
-//     try rbtree.insert(3);
-//     try rbtree.insert(7);
-//     var res = try rbtree.level_order_transversal();
-//     try expect(std.mem.eql(u8, "8B3,2R2,15B0,1B1,5B1,0R0,3R0,7R0,", res));
-//     try rbtree.insert(6);
-//     res = try rbtree.level_order_transversal();
-//     try expect(std.mem.eql(u8, "5B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,6R0,", res));
-// }
+test "red black tree insert 3" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var rbtree = RedBlackTree(u32).new();
 
-// // The following RB tree visualizer was used to help develop these test cases
-// // https://www.cs.usfca.edu/~galles/visualization/RedBlack.html
-// test "delete leaf" {
-//     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-//     defer arena.deinit();
-//     const allocator = arena.allocator();
-//     var rbtree = RedBlackTree(u32).new(allocator);
-//     try rbtree.insert(8);
-//     try rbtree.insert(2);
-//     try rbtree.insert(15);
-//     try rbtree.insert(1);
-//     try rbtree.insert(5);
-//     try rbtree.insert(0);
-//     try rbtree.insert(3);
-//     try rbtree.insert(7);
-//     try rbtree.insert(6);
-//     var res = try rbtree.level_order_transversal();
-//     try expect(std.mem.eql(u8, "5B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,6R0,", res));
-//     try rbtree.delete(6);
-//     res = try rbtree.level_order_transversal();
-//     std.debug.print("{s}{s}", .{ "\n", res });
-//     try expect(std.mem.eql(u8, "5B3,2R2,8R1,1B1,3B0,7B0,15B0,0R0,", res));
-// }
+    var n8 = RedBlackTree(u32).Node{ .data = 8 };
+    var n2 = RedBlackTree(u32).Node{ .data = 2 };
+    var n15 = RedBlackTree(u32).Node{ .data = 15 };
+    var n1 = RedBlackTree(u32).Node{ .data = 1 };
+    var n5 = RedBlackTree(u32).Node{ .data = 5 };
+    var n0 = RedBlackTree(u32).Node{ .data = 0 };
+    var n3 = RedBlackTree(u32).Node{ .data = 3 };
+    var n7 = RedBlackTree(u32).Node{ .data = 7 };
+    var n6 = RedBlackTree(u32).Node{ .data = 6 };
 
-// test "delete recolor case 1, no double black fixing required" {
-//     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-//     defer arena.deinit();
-//     const allocator = arena.allocator();
-//     var rbtree = RedBlackTree(u32).new(allocator);
-//     try rbtree.insert(5);
-//     try rbtree.insert(2);
-//     try rbtree.insert(8);
-//     try rbtree.insert(1);
-//     try rbtree.insert(3);
-//     try rbtree.insert(7);
-//     try rbtree.insert(15);
-//     try rbtree.insert(0);
-//     try rbtree.insert(4);
-//     try rbtree.insert(6);
-//     var res = try rbtree.level_order_transversal();
-//     try expect(std.mem.eql(u8, "5B3,2R2,8R2,1B1,3B1,7B1,15B0,0R0,4R0,6R0,", res));
-//     try rbtree.delete(5);
-//     res = try rbtree.level_order_transversal();
-//     std.debug.print("{s}{s}", .{ "\n", res });
-//     try expect(std.mem.eql(u8, "4B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,6R0,", res));
-// }
+    try rbtree.insert(&n8);
+    try rbtree.insert(&n2);
+    try rbtree.insert(&n15);
+    try rbtree.insert(&n1);
+    try rbtree.insert(&n5);
+    try rbtree.insert(&n0);
+    try rbtree.insert(&n3);
+    try rbtree.insert(&n7);
+    try rbtree.check(allocator, "8B3,2R2,15B0,1B1,5B1,0R0,3R0,7R0,");
+    try rbtree.insert(&n6);
+    try rbtree.check(allocator, "5B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,6R0,");
+}
 
-// test "delete - double black - case 3c" {
-//     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-//     defer arena.deinit();
-//     const allocator = arena.allocator();
-//     var rbtree = RedBlackTree(u32).new(allocator);
-//     try rbtree.insert(5);
-//     try rbtree.insert(2);
-//     try rbtree.insert(8);
-//     try rbtree.insert(1);
-//     try rbtree.insert(3);
-//     try rbtree.insert(7);
-//     try rbtree.insert(15);
-//     try rbtree.insert(0);
-//     try rbtree.insert(6);
-//     var res = try rbtree.level_order_transversal();
-//     std.debug.print("{s}{s}", .{ "\n", res });
-//     try expect(std.mem.eql(u8, "5B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,6R0,", res));
-//     try rbtree.delete(5);
-//     res = try rbtree.level_order_transversal();
-//     std.debug.print("{s}{s}", .{ "\n", res });
-//     try expect(std.mem.eql(u8, "3B3,1R1,8R2,0B0,2B0,7B1,15B0,6R0,", res));
-// }
+// The following RB tree visualizer was used to help develop these test cases
+// https://www.cs.usfca.edu/~galles/visualization/RedBlack.html
+test "delete leaf" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var rbtree = RedBlackTree(u32).new();
 
-// test "delete - double black - case 3b and 3a" {
-//     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-//     defer arena.deinit();
-//     const allocator = arena.allocator();
-//     var rbtree = RedBlackTree(u32).new(allocator);
-//     try rbtree.insert(5);
-//     try rbtree.insert(2);
-//     try rbtree.insert(8);
-//     try rbtree.insert(1);
-//     try rbtree.insert(3);
-//     try rbtree.insert(7);
-//     try rbtree.insert(15);
-//     try rbtree.insert(0);
-//     try rbtree.insert(6);
-//     var res = try rbtree.level_order_transversal();
-//     std.debug.print("{s}{s}", .{ "\n", res });
-//     try expect(std.mem.eql(u8, "5B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,6R0,", res));
-//     try rbtree.delete(8);
-//     res = try rbtree.level_order_transversal();
-//     std.debug.print("{s}{s}", .{ "\n", res });
-//     try expect(std.mem.eql(u8, "5B3,2R2,7R1,1B1,3B0,6B0,15B0,0R0,", res));
-//     try rbtree.delete(7); // case 3b
-//     res = try rbtree.level_order_transversal();
-//     std.debug.print("{s}{s}", .{ "\n", res });
-//     try expect(std.mem.eql(u8, "5B3,2R2,6B1,1B1,3B0,15R0,0R0,", res));
-//     try rbtree.delete(15);
-//     try rbtree.delete(6); // case 3a into 3b
-//     res = try rbtree.level_order_transversal();
-//     std.debug.print("{s}{s}", .{ "\n", res });
-//     try expect(std.mem.eql(u8, "2B2,1B1,5B1,0R0,3R0,", res));
-// }
+    var n8 = RedBlackTree(u32).Node{ .data = 8 };
+    var n2 = RedBlackTree(u32).Node{ .data = 2 };
+    var n15 = RedBlackTree(u32).Node{ .data = 15 };
+    var n1 = RedBlackTree(u32).Node{ .data = 1 };
+    var n5 = RedBlackTree(u32).Node{ .data = 5 };
+    var n0 = RedBlackTree(u32).Node{ .data = 0 };
+    var n3 = RedBlackTree(u32).Node{ .data = 3 };
+    var n7 = RedBlackTree(u32).Node{ .data = 7 };
+    var n6 = RedBlackTree(u32).Node{ .data = 6 };
 
-// test "delete double-black case 3d" {
-//     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-//     defer arena.deinit();
-//     const allocator = arena.allocator();
-//     var rbtree = RedBlackTree(u32).new(allocator);
-//     try rbtree.insert(12);
-//     try rbtree.insert(10);
-//     try rbtree.insert(14);
-//     try rbtree.insert(13);
-//     var res = try rbtree.level_order_transversal();
-//     std.debug.print("{s}{s}", .{ "\n", res });
-//     try expect(std.mem.eql(u8, "12B2,10B0,14B1,13R0,", res));
-//     try rbtree.delete(10);
-//     res = try rbtree.level_order_transversal();
-//     try expect(std.mem.eql(u8, "13B1,12B0,14B0,", res));
-// }
+    try rbtree.insert(&n8);
+    try rbtree.insert(&n2);
+    try rbtree.insert(&n15);
+    try rbtree.insert(&n1);
+    try rbtree.insert(&n5);
+    try rbtree.insert(&n0);
+    try rbtree.insert(&n3);
+    try rbtree.insert(&n7);
+    try rbtree.insert(&n6);
+    try rbtree.check(allocator, "5B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,6R0,");
 
-// test "delete root" {
-//     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-//     defer arena.deinit();
-//     const allocator = arena.allocator();
-//     var rbtree = RedBlackTree(u32).new(allocator);
-//     try rbtree.insert(1);
-//     try rbtree.insert(3);
-//     try rbtree.insert(2);
-//     try rbtree.delete(2);
-//     try rbtree.delete(3);
-//     try rbtree.delete(1);
-//     const res = try rbtree.level_order_transversal();
-//     std.debug.print("{s}{s}", .{ "\n", res });
-//     try expect(std.mem.eql(u8, "", res));
-// }
+    _ = try rbtree.delete(6);
+    try rbtree.check(allocator, "5B3,2R2,8R1,1B1,3B0,7B0,15B0,0R0,");
+}
 
-// test "deleting non-existent data doesn't cause any errors" {
-//     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-//     defer arena.deinit();
-//     const allocator = arena.allocator();
-//     var rbtree = RedBlackTree(u32).new(allocator);
-//     try rbtree.insert(1);
-//     try rbtree.insert(3);
-//     try rbtree.insert(2);
-//     try rbtree.delete(6);
-//     try rbtree.delete(3);
-//     try rbtree.delete(5);
-//     const res = try rbtree.level_order_transversal();
-//     std.debug.print("{s}{s}", .{ "\n", res });
-//     try expect(std.mem.eql(u8, "2B1,1R0,", res));
-// }
+test "delete recolor case 1, no double black fixing required" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var rbtree = RedBlackTree(u32).new();
 
-// test "inserting and deleting multiple of same value increases frequency" {
-//     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-//     defer arena.deinit();
-//     const allocator = arena.allocator();
-//     var rbtree = RedBlackTree(u32).new(allocator);
-//     try rbtree.insert(2);
-//     try rbtree.insert(2);
-//     const nd = rbtree.get_data(2);
-//     std.debug.assert(nd.?.frequency == 2);
-//     try rbtree.delete(2);
-//     std.debug.assert(nd.?.frequency == 1);
-//     try rbtree.delete(2);
-//     std.debug.assert(nd.?.frequency == 1);
-//     // nd = null;
-//     // std.debug.assert(nd == null);
+    var n5 = RedBlackTree(u32).Node{ .data = 5 };
+    var n2 = RedBlackTree(u32).Node{ .data = 2 };
+    var n8 = RedBlackTree(u32).Node{ .data = 8 };
+    var n1 = RedBlackTree(u32).Node{ .data = 1 };
+    var n3 = RedBlackTree(u32).Node{ .data = 3 };
+    var n7 = RedBlackTree(u32).Node{ .data = 7 };
+    var n15 = RedBlackTree(u32).Node{ .data = 15 };
+    var n0 = RedBlackTree(u32).Node{ .data = 0 };
+    var n4 = RedBlackTree(u32).Node{ .data = 4 };
+    var n6 = RedBlackTree(u32).Node{ .data = 6 };
 
-//     // TODO: this is dangerous... we may end up freeing node inside rbtree but the outside world does not know
-//     // I suppose this is why usually we get the user to create the node, and then pass it in to be linked into
-//     // the data structure. So the structure doesn't own the memory but the calling process does
-//     // We should redo the code so we DON'T allocate nodes within the red black tree
-//     // Delete should return the node deleted -> then the calling process can destroy it
-//     // Then the calling process can decide whether to use the heap or the stack as well...
+    try rbtree.insert(&n5);
+    try rbtree.insert(&n2);
+    try rbtree.insert(&n8);
+    try rbtree.insert(&n1);
+    try rbtree.insert(&n3);
+    try rbtree.insert(&n7);
+    try rbtree.insert(&n15);
+    try rbtree.insert(&n0);
+    try rbtree.insert(&n4);
+    try rbtree.insert(&n6);
+    try rbtree.check(allocator, "5B3,2R2,8R2,1B1,3B1,7B1,15B0,0R0,4R0,6R0,");
 
-//     // var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-//     // const allocator = arena.allocator();
-//     // const byte = try allocator.create(u8);
-//     // byte.* = 128;
-//     // std.debug.assert(byte.* == 128);
-//     // allocator.destroy(byte);
-//     // std.debug.assert(byte.* == 128); // this still passes!! Zig can't detect freed memory ... :(
-// }
+    _ = try rbtree.delete(5);
+    try rbtree.check(allocator, "4B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,6R0,");
+}
+
+test "delete - double black - case 3c" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var rbtree = RedBlackTree(u32).new();
+
+    var n5 = RedBlackTree(u32).Node{ .data = 5 };
+    var n2 = RedBlackTree(u32).Node{ .data = 2 };
+    var n8 = RedBlackTree(u32).Node{ .data = 8 };
+    var n1 = RedBlackTree(u32).Node{ .data = 1 };
+    var n3 = RedBlackTree(u32).Node{ .data = 3 };
+    var n7 = RedBlackTree(u32).Node{ .data = 7 };
+    var n15 = RedBlackTree(u32).Node{ .data = 15 };
+    var n0 = RedBlackTree(u32).Node{ .data = 0 };
+    var n6 = RedBlackTree(u32).Node{ .data = 6 };
+
+    try rbtree.insert(&n5);
+    try rbtree.insert(&n2);
+    try rbtree.insert(&n8);
+    try rbtree.insert(&n1);
+    try rbtree.insert(&n3);
+    try rbtree.insert(&n7);
+    try rbtree.insert(&n15);
+    try rbtree.insert(&n0);
+    try rbtree.insert(&n6);
+    try rbtree.check(allocator, "5B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,6R0,");
+
+    _ = try rbtree.delete(5);
+    try rbtree.check(allocator, "3B3,1R1,8R2,0B0,2B0,7B1,15B0,6R0,");
+}
+
+test "delete - double black - case 3b and 3a" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var rbtree = RedBlackTree(u32).new();
+
+    var n5 = RedBlackTree(u32).Node{ .data = 5 };
+    var n2 = RedBlackTree(u32).Node{ .data = 2 };
+    var n8 = RedBlackTree(u32).Node{ .data = 8 };
+    var n1 = RedBlackTree(u32).Node{ .data = 1 };
+    var n3 = RedBlackTree(u32).Node{ .data = 3 };
+    var n7 = RedBlackTree(u32).Node{ .data = 7 };
+    var n15 = RedBlackTree(u32).Node{ .data = 15 };
+    var n0 = RedBlackTree(u32).Node{ .data = 0 };
+    var n6 = RedBlackTree(u32).Node{ .data = 6 };
+
+    try rbtree.insert(&n5);
+    try rbtree.insert(&n2);
+    try rbtree.insert(&n8);
+    try rbtree.insert(&n1);
+    try rbtree.insert(&n3);
+    try rbtree.insert(&n7);
+    try rbtree.insert(&n15);
+    try rbtree.insert(&n0);
+    try rbtree.insert(&n6);
+    try rbtree.check(allocator, "5B3,2R2,8R2,1B1,3B0,7B1,15B0,0R0,6R0,");
+
+    _ = try rbtree.delete(8);
+    try rbtree.check(allocator, "5B3,2R2,7R1,1B1,3B0,6B0,15B0,0R0,");
+
+    _ = try rbtree.delete(7); // case 3b
+    try rbtree.check(allocator, "5B3,2R2,6B1,1B1,3B0,15R0,0R0,");
+
+    _ = try rbtree.delete(15);
+    _ = try rbtree.delete(6); // case 3a into 3b
+    try rbtree.check(allocator, "2B2,1B1,5B1,0R0,3R0,");
+}
+
+test "delete double-black case 3d" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var rbtree = RedBlackTree(u32).new();
+
+    var n12 = RedBlackTree(u32).Node{ .data = 12 };
+    var n10 = RedBlackTree(u32).Node{ .data = 10 };
+    var n14 = RedBlackTree(u32).Node{ .data = 14 };
+    var n13 = RedBlackTree(u32).Node{ .data = 13 };
+
+    try rbtree.insert(&n12);
+    try rbtree.insert(&n10);
+    try rbtree.insert(&n14);
+    try rbtree.insert(&n13);
+    try rbtree.check(allocator, "12B2,10B0,14B1,13R0,");
+    _ = try rbtree.delete(10);
+    try rbtree.check(allocator, "13B1,12B0,14B0,");
+}
+
+test "delete root" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var rbtree = RedBlackTree(u32).new();
+
+    var n1 = RedBlackTree(u32).Node{ .data = 1 };
+    var n2 = RedBlackTree(u32).Node{ .data = 2 };
+    var n3 = RedBlackTree(u32).Node{ .data = 3 };
+
+    try rbtree.insert(&n1);
+    try rbtree.insert(&n3);
+    try rbtree.insert(&n2);
+
+    _ = try rbtree.delete(2);
+    _ = try rbtree.delete(3);
+    _ = try rbtree.delete(1);
+    try rbtree.check(allocator, "");
+}
+
+test "deleting non-existent data doesn't cause any errors" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var rbtree = RedBlackTree(u32).new();
+
+    var n1 = RedBlackTree(u32).Node{ .data = 1 };
+    var n3 = RedBlackTree(u32).Node{ .data = 3 };
+    var n2 = RedBlackTree(u32).Node{ .data = 2 };
+
+    try rbtree.insert(&n1);
+    try rbtree.insert(&n3);
+    try rbtree.check(allocator, "1B1,3R0,");
+    try rbtree.insert(&n2);
+    try rbtree.check(allocator, "2B1,1R0,3R0,");
+    _ = try rbtree.delete(6);
+    _ = try rbtree.delete(3);
+    _ = try rbtree.delete(5);
+    try rbtree.check(allocator, "2B1,1R0,");
+}
+
+test "inserting and deleting multiple of same value increases frequency" {
+    var rbtree = RedBlackTree(u32).new();
+
+    var n2_1 = RedBlackTree(u32).Node{ .data = 2 };
+    var n2_2 = RedBlackTree(u32).Node{ .data = 2 };
+
+    try rbtree.insert(&n2_1);
+    try rbtree.insert(&n2_2);
+    const nd = rbtree.get_data(2);
+    std.debug.assert(nd.?.frequency == 2);
+    _ = try rbtree.delete(2);
+    std.debug.assert(nd.?.frequency == 1);
+    _ = try rbtree.delete(2);
+    std.debug.assert(nd.?.frequency == 1);
+}
 
 test "fire away" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
     var rbtree = RedBlackTree(u32).new();
+
     var n1562 = RedBlackTree(u32).Node{ .data = 1562 };
     var n3848 = RedBlackTree(u32).Node{ .data = 3848 };
     var n58 = RedBlackTree(u32).Node{ .data = 58 };
