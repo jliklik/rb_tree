@@ -651,13 +651,12 @@ pub fn RedBlackTree(comptime T: type) type {
                 if (rbn.children[@intFromEnum(Direction.left)]) |left| {
                     var new_qn = queue.Queue(*Node).Node{ .data = left };
                     try q.push(&new_qn);
-                    try do_level_order_transversal(q, dynamic_string);
                 }
                 if (rbn.children[@intFromEnum(Direction.right)]) |right| {
                     var new_qn = queue.Queue(*Node).Node{ .data = right };
                     try q.push(&new_qn);
-                    try do_level_order_transversal(q, dynamic_string);
                 }
+                try do_level_order_transversal(q, dynamic_string);
             }
         }
 
