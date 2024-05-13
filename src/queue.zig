@@ -18,16 +18,17 @@ pub fn Queue(comptime T: type) type {
 
         head: ?*Node = null,
         tail: ?*Node = null,
-        allocator: std.mem.Allocator,
 
-        pub fn new(allocator: std.mem.Allocator) Self {
-            return .{ .head = null, .tail = null, .allocator = allocator };
+        pub fn new() Self {
+            return .{ .head = null, .tail = null };
         }
 
-        fn create_node(self: *Self, data: T) !*Node {
-            var node = try self.allocator.create(Node);
-            node.data = data;
-            node.next = null;
+        pub fn new_node(allocator: std.mem.Allocator, data: T) *Node {
+            const node = try allocator.create(Queue.Node);
+            node.* = .{
+                .data = data,
+                .next = null,
+            };
             return node;
         }
 
@@ -38,24 +39,21 @@ pub fn Queue(comptime T: type) type {
             return false;
         }
 
-        pub fn pop(self: *Self) ?T {
-            if (self.head) |head| {
-                const data = head.data;
-                self.head = head.next;
-                self.allocator.destroy(head);
+        pub fn pop(self: *Self) ?*Node {
+            if (self.head) |popped| {
+                self.head = popped.next;
                 // last item popped
                 if (self.head == null) {
                     self.tail = null;
                 }
 
-                return data;
+                return popped;
             } else {
                 return null;
             }
         }
 
-        pub fn push(self: *Self, data: T) !void {
-            const node = try create_node(self, data);
+        pub fn push(self: *Self, node: *Node) !void {
             if (self.tail) |tail| {
                 tail.next = node;
                 self.tail = node;
@@ -70,27 +68,29 @@ pub fn Queue(comptime T: type) type {
 }
 
 test "basic Queue test" {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-    var q = Queue(u32).new(allocator);
+    var q = Queue(u32).new();
 
     try testing.expect(q.pop() == null);
     try testing.expect(q.is_empty() == true);
 
-    try q.push(1);
-    try q.push(2);
-    try q.push(3);
+    var n1 = Queue(u32).Node{ .data = 1 };
+    var n2 = Queue(u32).Node{ .data = 2 };
+    var n3 = Queue(u32).Node{ .data = 3 };
+    var n4 = Queue(u32).Node{ .data = 4 };
+    var n5 = Queue(u32).Node{ .data = 5 };
+    try q.push(&n1);
+    try q.push(&n2);
+    try q.push(&n3);
 
-    try testing.expect(q.pop() == 1);
-    try testing.expect(q.pop() == 2);
-    try testing.expect(q.pop() == 3);
+    try testing.expect(q.pop().?.data == 1);
+    try testing.expect(q.pop().?.data == 2);
+    try testing.expect(q.pop().?.data == 3);
 
-    try q.push(4);
-    try q.push(5);
+    try q.push(&n4);
+    try q.push(&n5);
 
-    try testing.expect(q.pop() == 4);
-    try testing.expect(q.pop() == 5);
+    try testing.expect(q.pop().?.data == 4);
+    try testing.expect(q.pop().?.data == 5);
     try testing.expect(q.pop() == null);
     try testing.expect(q.is_empty() == true);
 }
